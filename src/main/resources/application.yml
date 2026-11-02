@@ -5,7 +5,7 @@ spring:
   datasource:
     url: jdbc:mariadb://localhost:3306/ticketmaster
     username: root
-    password: wasiri
+    password: root
     driver-class-name: org.mariadb.jdbc.Driver
 
   jpa:
@@ -19,13 +19,13 @@ spring:
 server:
   port: 8080
 
-services:
-  order:
-    base-url: ${ORDER_SERVICE_URL:http://localhost:8081}
-
 jwt:
   secret: ThisIsAVeryLongSecretKeyForJWTTokenGenerationChangeInProduction1234567890
   expiration: 86400000
+
+google:
+  client-id: dummy-client-id-for-demo
+  client-secret: dummy-client-secret-for-demo
 
 springdoc:
   swagger-ui:

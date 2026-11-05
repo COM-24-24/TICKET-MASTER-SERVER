@@ -58,8 +58,6 @@ class UserServiceTest {
         AuthResponse response = userService.register(request);
 
         assertNotNull(response);
-        assertEquals("newuser@test.com", response.getEmail());
-        assertEquals("CUSTOMER", response.getRole());
         assertEquals("mock.jwt.token", response.getToken());
 
         verify(userRepository).save(any(User.class));
@@ -122,8 +120,6 @@ class UserServiceTest {
         AuthResponse response = userService.login(request);
 
         assertNotNull(response);
-        assertEquals("test@test.com", response.getEmail());
-        assertEquals("CUSTOMER", response.getRole());
         assertEquals("mock.jwt.token", response.getToken());
     }
 

@@ -1,8 +1,10 @@
 package com.ticketmaster.ticketmaster.events;
 
 import com.ticketmaster.ticketmaster.events.entity.TicketType;
+import com.ticketmaster.ticketmaster.events.entity.TicketTypeRepository;
 import com.ticketmaster.ticketmaster.events.entity.TicketTypeService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -15,9 +17,11 @@ import java.util.List;
 public class TicketTypeController {
 
     private final TicketTypeService service;
+    private final TicketTypeRepository ticketTypeRepository;
 
-    public TicketTypeController(TicketTypeService service) {
+    public TicketTypeController(TicketTypeService service, TicketTypeRepository ticketTypeRepository) {
         this.service = service;
+        this.ticketTypeRepository = ticketTypeRepository;
     }
 
     public static class CreateTicketTypeRequest {
@@ -42,10 +46,32 @@ public class TicketTypeController {
         return service.update(id, req.price, req.totalQuantity, getUsername(auth));
     }
 
+    // new
     @GetMapping("/events/{eventId}/ticket-types")
-    public List<TicketType> list(@PathVariable Long eventId) {
-        return service.listForEvent(eventId);
+    public List<TicketType> list(
+            @PathVariable Long eventId,
+            @RequestParam(required = false) String name) {
+
+        List<TicketType> all = ticketTypeRepository.findByEventId(eventId);
+
+        if (name != null && !name.isBlank()) {
+            return all.stream()
+                    .filter(t -> t.getName().equalsIgnoreCase(name))
+                    .toList();
+        }
+        return all;
     }
+
+@GetMapping("/ticket-types/{id}")
+public ResponseEntity<TicketType> getOne(@PathVariable Long id) {
+    return ticketTypeRepository.findById(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+}
+
+
+
+
 
     private String getUsername(Authentication auth) {
         if (auth == null || !auth.isAuthenticated()

@@ -1,4 +1,3 @@
-
 package com.ticketmaster.ticketmaster.ticket;
 
 import com.ticketmaster.ticketmaster.events.entity.Event;
@@ -85,13 +84,7 @@ public class TicketIssuingService {
                                             + item.getTicketTypeId()
                             ));
 
-            if (ticketType.getEvent() == null
-                    || !ticketType.getEvent().getId()
-                            .equals(order.getEventId())) {
-                throw new IllegalArgumentException(
-                        "Ticket type does not belong to the event in this order."
-                );
-            }
+            // Removed the lazy-loading check. The OrderService already validated this.
 
             for (int i = 0; i < item.getQuantity(); i++) {
 

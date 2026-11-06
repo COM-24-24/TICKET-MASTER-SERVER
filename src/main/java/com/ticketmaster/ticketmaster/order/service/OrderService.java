@@ -8,6 +8,7 @@ import com.ticketmaster.ticketmaster.order.dto.PlaceOrderRequest;
 import com.ticketmaster.ticketmaster.order.entity.Order;
 import com.ticketmaster.ticketmaster.order.entity.OrderItem;
 import com.ticketmaster.ticketmaster.order.repository.OrderRepository;
+import com.ticketmaster.ticketmaster.ticket.TicketIssuingService;
 import com.ticketmaster.ticketmaster.user.entity.User;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,13 +26,11 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
-    
-    // 1. Inject the TicketType repository to check capacity
     private final TicketTypeRepository ticketTypeRepository;
+    private final TicketIssuingService ticketIssuingService;
 
     @Transactional
     public OrderResponse placeOrder(PlaceOrderRequest request) {
-        // Input Validation
         if (request.getEventId() == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
         }
@@ -54,7 +53,6 @@ public class OrderService {
 
         for (PlaceOrderRequest.ItemRequest itemReq : request.getItems()) {
             
-            // 2. LOCK THE ROW & CHECK CAPACITY (Replaces Ian's CapacityService)
             TicketType ticketType = ticketTypeRepository.findByIdForUpdate(itemReq.getTicketTypeId())
                     .orElseThrow(() -> new IllegalArgumentException("Ticket type not found"));
 
@@ -63,11 +61,9 @@ public class OrderService {
                 throw new IllegalArgumentException("Not enough tickets available for: " + ticketType.getName());
             }
 
-            // Deduct the capacity immediately
             ticketType.setQuantitySold(ticketType.getQuantitySold() + itemReq.getQuantity());
             ticketTypeRepository.save(ticketType);
 
-            // 3. Use the REAL price from the database
             BigDecimal unitPrice = ticketType.getPrice();
 
             OrderItem orderItem = OrderItem.builder()
@@ -124,7 +120,6 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found"));
 
-        // Security check: Only the owner can view the order
         if (!order.getUser().getEmail().equals(email)) {
             throw new SecurityException("You are not authorized to view this order");
         }
@@ -137,34 +132,28 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found"));
 
-        // 1. Idempotency: If the status is already the same, do nothing.
         if (order.getStatus() == newStatus) {
             return;
         }
 
-        // 2. State Transition validation
         if (order.getStatus() == Order.OrderStatus.PAID || order.getStatus() == Order.OrderStatus.CANCELLED) {
             throw new IllegalStateException("Cannot change status of a " + order.getStatus() + " order.");
         }
 
-        // 3. Handle the new status
         if (newStatus == Order.OrderStatus.PAID) {
             order.setStatus(Order.OrderStatus.PAID);
-            
-            // TODO: Call Mike's issueTickets(order) here once his module is merged
-            
+
+            // ISSUE TICKETS ON PAID
+            ticketIssuingService.issueTickets(order);
+
         } else if (newStatus == Order.OrderStatus.FAILED || newStatus == Order.OrderStatus.CANCELLED) {
             order.setStatus(newStatus);
-            
-            // FIX: Force Hibernate to initialize the lazy-loaded collection
             order.getItems().size(); 
             
-            // 4. RELEASE CAPACITY (Give the tickets back)
             for (OrderItem item : order.getItems()) {
                 TicketType ticketType = ticketTypeRepository.findByIdForUpdate(item.getTicketTypeId())
                         .orElseThrow(() -> new IllegalArgumentException("Ticket type not found"));
                 
-                // Ensure we don't drop below zero
                 int newSold = ticketType.getQuantitySold() - item.getQuantity();
                 ticketType.setQuantitySold(Math.max(0, newSold));
                 ticketTypeRepository.save(ticketType);
@@ -180,17 +169,14 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found"));
 
-        // 1. Security check: Only the owner can cancel
         if (!order.getUser().getEmail().equals(email)) {
             throw new SecurityException("You are not authorized to cancel this order");
         }
 
-        // 2. State check: Only PENDING orders can be cancelled
         if (order.getStatus() != Order.OrderStatus.PENDING) {
             throw new IllegalStateException("Only PENDING orders can be cancelled");
         }
 
-        // 3. Update status
         updateOrderStatus(orderId, Order.OrderStatus.CANCELLED);
 
         return mapToResponse(order);

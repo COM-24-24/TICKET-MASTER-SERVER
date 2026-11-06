@@ -27,13 +27,13 @@ jwt:
 google:
   client-id: ${GOOGLE_CLIENT_ID}
   client-secret: ${GOOGLE_CLIENT_SECRET}
-  
-paychangu:
-  secret-key: sec-test-WPIYv8SbbFGTD8BmZ1KJxA1T1DVFQNhS
-  base-url: https://api.paychangu.com
-  callback-url: http://localhost:8080/api/payments/callback
-  return-url: http://localhost:8080/api/payments/return
 
+paychangu:
+  secret-key: ${PAYCHANGU_SECRET_KEY}
+  base-url: https://api.paychangu.com
+  callback-url: ${PAYCHANGU_CALLBACK_URL:http://localhost:8080/api/payments/callback}
+  return-url: ${PAYCHANGU_RETURN_URL:http://localhost:8080/api/payments/return}
+  
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

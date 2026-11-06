@@ -1,7 +1,6 @@
 package com.ticketmaster.ticketmaster.config;
 
 import com.ticketmaster.ticketmaster.security.JwtAuthenticationFilter;
-import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -25,11 +24,15 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
+
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthFilter, UserDetailsService userDetailsService) {
+        this.jwtAuthFilter = jwtAuthFilter;
+        this.userDetailsService = userDetailsService;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -46,11 +49,11 @@ public class SecurityConfig {
                     "/v3/api-docs/**",
                     "/api/payments/**",
                     "/api/orders/*/status",
-                    "/api/events/**",         // <-- Added: Make events public
-                    "/api/ticket-types/**",   // <-- Added: Make ticket types public
-                    "/api/interests/**",      // <-- Added: Make interests public
-                    "/api/customers/**",      // <-- Added: Allow profile creation
-                    "/api/reports/**"         // <-- Added: Allow reports
+                    "/api/events/**",
+                    "/api/ticket-types/**",
+                    "/api/interests/**",
+                    "/api/customers/**",
+                    "/api/reports/**"
                 ).permitAll()
                 .requestMatchers("/api/orders/**").hasRole("CUSTOMER")
                 .requestMatchers("/api/organizer/**").hasRole("ORGANIZER")

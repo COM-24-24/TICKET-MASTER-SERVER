@@ -12,7 +12,6 @@ import com.ticketmaster.ticketmaster.user.dto.LoginRequest;
 import com.ticketmaster.ticketmaster.user.dto.RegisterRequest;
 import com.ticketmaster.ticketmaster.user.entity.User;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,7 +23,6 @@ import org.springframework.stereotype.Service;
 import java.util.Collections;
 
 @Service
-@RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository userRepository;
@@ -36,6 +34,17 @@ public class UserService {
 
     @Value("${google.client-id}")
     private String googleClientId;
+
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService,
+                       AuthenticationManager authenticationManager, CustomUserDetailsService userDetailsService,
+                       ApplicationEventPublisher eventPublisher) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+        this.authenticationManager = authenticationManager;
+        this.userDetailsService = userDetailsService;
+        this.eventPublisher = eventPublisher;
+    }
 
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {

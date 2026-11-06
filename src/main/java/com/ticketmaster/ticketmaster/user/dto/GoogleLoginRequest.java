@@ -1,13 +1,17 @@
 package com.ticketmaster.ticketmaster.user.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import lombok.*;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
 public class GoogleLoginRequest {
     @NotBlank(message = "Google ID Token is required")
     private String idToken;
+
+    public GoogleLoginRequest() {}
+
+    public GoogleLoginRequest(String idToken) {
+        this.idToken = idToken;
+    }
+
+    public String getIdToken() { return idToken; }
+    public void setIdToken(String idToken) { this.idToken = idToken; }
 }

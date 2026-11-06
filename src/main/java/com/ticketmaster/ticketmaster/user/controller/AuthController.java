@@ -11,7 +11,6 @@ import com.ticketmaster.ticketmaster.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,13 +20,18 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 @Tag(name = "Authentication", description = "Register and login endpoints")
 public class AuthController {
 
     private final UserService userService;
     private final JwtService jwtService;
     private final CustomUserDetailsService userDetailsService;
+
+    public AuthController(UserService userService, JwtService jwtService, CustomUserDetailsService userDetailsService) {
+        this.userService = userService;
+        this.jwtService = jwtService;
+        this.userDetailsService = userDetailsService;
+    }
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user")

@@ -11,7 +11,6 @@ import com.ticketmaster.ticketmaster.order.repository.OrderRepository;
 import com.ticketmaster.ticketmaster.ticket.TicketIssuingService;
 import com.ticketmaster.ticketmaster.user.entity.User;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,13 +20,20 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class OrderService {
 
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final TicketTypeRepository ticketTypeRepository;
     private final TicketIssuingService ticketIssuingService;
+
+    public OrderService(OrderRepository orderRepository, UserRepository userRepository,
+                        TicketTypeRepository ticketTypeRepository, TicketIssuingService ticketIssuingService) {
+        this.orderRepository = orderRepository;
+        this.userRepository = userRepository;
+        this.ticketTypeRepository = ticketTypeRepository;
+        this.ticketIssuingService = ticketIssuingService;
+    }
 
     @Transactional
     public OrderResponse placeOrder(PlaceOrderRequest request) {
@@ -142,13 +148,10 @@ public class OrderService {
 
         if (newStatus == Order.OrderStatus.PAID) {
             order.setStatus(Order.OrderStatus.PAID);
-
-            // ISSUE TICKETS ON PAID
             ticketIssuingService.issueTickets(order);
-
         } else if (newStatus == Order.OrderStatus.FAILED || newStatus == Order.OrderStatus.CANCELLED) {
             order.setStatus(newStatus);
-            order.getItems().size(); 
+            order.getItems().size();
             
             for (OrderItem item : order.getItems()) {
                 TicketType ticketType = ticketTypeRepository.findByIdForUpdate(item.getTicketTypeId())

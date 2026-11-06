@@ -49,17 +49,15 @@ public class UserService {
                 .build();
 
         userRepository.save(user);
-
-        // Publish the event so Beatrice's listener creates the CustomerProfile
         eventPublisher.publishEvent(new UserRegisteredEvent(user));
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String token = jwtService.generateToken(userDetails);
+        String refreshToken = jwtService.generateRefreshToken(userDetails);
 
         return AuthResponse.builder()
                 .token(token)
-                .email(user.getEmail())
-                .role(user.getRole().name())
+                .refreshToken(refreshToken)
                 .build();
     }
 
@@ -73,17 +71,16 @@ public class UserService {
 
         UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
         String token = jwtService.generateToken(userDetails);
+        String refreshToken = jwtService.generateRefreshToken(userDetails);
 
         return AuthResponse.builder()
                 .token(token)
-                .email(user.getEmail())
-                .role(user.getRole().name())
+                .refreshToken(refreshToken)
                 .build();
     }
 
     public AuthResponse googleLogin(String idTokenString) {
         try {
-            // 1. Verify the token with Google
             GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(new NetHttpTransport(), new GsonFactory())
                     .setAudience(Collections.singletonList(googleClientId))
                     .build();
@@ -93,31 +90,28 @@ public class UserService {
                 throw new IllegalArgumentException("Invalid Google ID token.");
             }
 
-            // 2. Extract email
             GoogleIdToken.Payload payload = idToken.getPayload();
             String email = payload.getEmail();
 
-            // 3. Check if user exists, if not, create them
             User user = userRepository.findByEmail(email).orElse(null);
 
             if (user == null) {
                 user = User.builder()
                         .email(email)
-                        .password(passwordEncoder.encode(java.util.UUID.randomUUID().toString())) // Random secure password
+                        .password(passwordEncoder.encode(java.util.UUID.randomUUID().toString()))
                         .role(User.Role.CUSTOMER)
                         .build();
                 userRepository.save(user);
                 eventPublisher.publishEvent(new UserRegisteredEvent(user));
             }
 
-            // 4. Generate our own JWT
             UserDetails userDetails = userDetailsService.loadUserByUsername(user.getEmail());
             String token = jwtService.generateToken(userDetails);
+            String refreshToken = jwtService.generateRefreshToken(userDetails);
 
             return AuthResponse.builder()
                     .token(token)
-                    .email(user.getEmail())
-                    .role(user.getRole().name())
+                    .refreshToken(refreshToken)
                     .build();
 
         } catch (Exception e) {

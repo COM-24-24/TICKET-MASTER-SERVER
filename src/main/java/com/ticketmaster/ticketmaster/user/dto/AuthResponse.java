@@ -2,18 +2,14 @@ package com.ticketmaster.ticketmaster.user.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Data
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class AuthResponse {
-
     private String token;
-    private String email;
-    private String role;
+    private String refreshToken;
 }

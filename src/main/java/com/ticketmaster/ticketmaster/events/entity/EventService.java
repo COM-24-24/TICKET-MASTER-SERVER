@@ -89,7 +89,16 @@ public class EventService {
         }
     }
 
+    // TEMPORARY BYPASS FOR DEMO
     private void checkOrganizer(Event event, String organizerUsername) {
-        // TEMPORARY BYPASS FOR DEMO
+        /*
+        if (organizerUsername == null
+                || !organizerUsername.equals(
+                        event.getOrganizerUsername())) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Only the event organizer can perform this action");
+        }
+        */
     }
 }

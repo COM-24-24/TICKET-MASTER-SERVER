@@ -23,6 +23,10 @@ jwt:
   secret: ThisIsAVeryLongSecretKeyForJWTTokenGenerationChangeInProduction1234567890
   expiration: 86400000
 
+google:
+  client-id: dummy-client-id-for-demo
+  client-secret: dummy-client-secret-for-demo
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
@@ -30,6 +34,3 @@ springdoc:
 logging:
   level:
     org.springframework.security: DEBUG
-
-google:
-  client-id: dummy-client-id-for-now.apps.googleusercontent.com

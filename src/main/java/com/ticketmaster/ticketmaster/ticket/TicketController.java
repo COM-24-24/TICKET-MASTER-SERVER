@@ -31,8 +31,8 @@ public class TicketController {
 
     @GetMapping("/my")
     @Operation(
-            summary = "Get my tickets",
-            description = "Returns the authenticated customer's tickets with event and ticket-type details."
+            summary = "Get my tickets with buyer and payment details",
+            description = "Returns the authenticated customer's tickets with event, buyer and payment details."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Tickets returned successfully"),
@@ -46,8 +46,8 @@ public class TicketController {
 
     @GetMapping("/{id}")
     @Operation(
-            summary = "Get ticket details",
-            description = "Returns full ticket, event and ticket-type details only if the ticket belongs to the authenticated customer."
+            summary = "Get details for an owned ticket",
+            description = "Returns full ticket, event, buyer and payment details only if the ticket belongs to the authenticated customer."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Ticket returned successfully"),

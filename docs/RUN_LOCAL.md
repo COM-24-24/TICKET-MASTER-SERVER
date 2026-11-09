@@ -1,0 +1,50 @@
+# Run locally
+
+## Docker Compose
+
+1. Copy `.env.example` to `.env` and set local values for all required secrets/database variables. Never commit `.env`.
+2. Start the database and backend:
+
+   ```sh
+   docker compose up --build
+   ```
+
+3. Check that the backend is healthy:
+
+   ```sh
+   curl -fsS http://localhost:8080/api/health
+   ```
+
+   Expected response:
+
+   ```json
+   {"status":"ok"}
+   ```
+
+The first dev-profile startup seeds the development accounts and sample events. Uploaded covers are stored in the named `ticketmaster_uploads` volume.
+
+## Demo payments
+
+Demo payments are enabled by default for the Docker Compose `dev` profile. To disable them, set `APP_DEMO_PAYMENT_ENABLED=false` in `.env` and recreate the backend:
+
+```sh
+docker compose up --build --force-recreate backend
+```
+
+To re-enable demo payments, set `APP_DEMO_PAYMENT_ENABLED=true` or remove that override and recreate the backend. The demo endpoint is not registered outside the `dev` profile, regardless of this setting.
+
+The application still requires valid PayChangu credentials for real checkouts; the demo endpoint does not require gateway calls.
+
+## Run tests locally
+
+Use JDK 17 for the project test suite. Newer JDKs may encounter Byte Buddy compatibility failures.
+
+```sh
+./mvnw clean test
+```
+
+On Windows PowerShell, use:
+
+```powershell
+.\mvnw.cmd clean test
+```

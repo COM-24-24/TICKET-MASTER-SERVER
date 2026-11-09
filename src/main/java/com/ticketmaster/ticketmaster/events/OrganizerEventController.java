@@ -4,6 +4,7 @@ import com.ticketmaster.ticketmaster.events.dto.EventImageResponse;
 import com.ticketmaster.ticketmaster.events.service.EventImageService;
 import com.ticketmaster.ticketmaster.events.entity.Event;
 import com.ticketmaster.ticketmaster.events.entity.EventRepository;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -26,6 +27,7 @@ public class OrganizerEventController {
     }
 
     @GetMapping
+    @Operation(summary = "List events owned by the authenticated organizer")
     public List<Event> myEvents(Authentication auth) {
         if (auth == null || !auth.isAuthenticated()
                 || "anonymousUser".equals(auth.getPrincipal())) {
@@ -35,6 +37,7 @@ public class OrganizerEventController {
     }
 
     @PostMapping(value = "/{eventId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload a JPG or PNG cover image for an owned event")
     public EventImageResponse uploadImage(
             @PathVariable Long eventId,
             @RequestPart("file") MultipartFile file,

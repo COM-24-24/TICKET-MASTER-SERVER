@@ -4,6 +4,7 @@ package com.ticketmaster.ticketmaster.events;
 import com.ticketmaster.ticketmaster.events.dto.EventResponse;
 import com.ticketmaster.ticketmaster.events.entity.Event;
 import com.ticketmaster.ticketmaster.events.entity.EventService;
+import io.swagger.v3.oas.annotations.Operation;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -24,6 +25,7 @@ public class EventController {
 
     // Create an event
     @PostMapping
+    @Operation(summary = "Create a draft event for the authenticated organizer")
     @ResponseStatus(HttpStatus.CREATED)
     public Event createEvent(
             @RequestBody Event event,
@@ -35,6 +37,7 @@ public class EventController {
 
     // Get all events
     @GetMapping
+    @Operation(summary = "List published and cancelled events with optional filters")
     public List<EventResponse> getAllEvents(
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String search) {
@@ -43,6 +46,7 @@ public class EventController {
 
     // Get one event
     @GetMapping("/{id}")
+    @Operation(summary = "Get event details; draft events are visible only to their owner")
     public EventResponse getEventById(@PathVariable Long id, Authentication authentication) {
         String requesterEmail = authentication == null ? null : authentication.getName();
         return eventService.getEventResponseById(id, requesterEmail);
@@ -50,6 +54,7 @@ public class EventController {
 
     // Edit an event
     @PutMapping("/{id}")
+    @Operation(summary = "Update an owned event")
     public Event editEvent(
             @PathVariable Long id,
             @RequestBody Event event,
@@ -61,6 +66,7 @@ public class EventController {
 
     // Publish an event
     @PatchMapping("/{id}/publish")
+    @Operation(summary = "Publish an owned event")
     public Event publishEvent(
             @PathVariable Long id,
             Authentication authentication) {
@@ -71,6 +77,7 @@ public class EventController {
 
     // Cancel an event
     @PatchMapping("/{id}/cancel")
+    @Operation(summary = "Cancel an owned event")
     public Event cancelEvent(
             @PathVariable Long id,
             Authentication authentication) {

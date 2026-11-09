@@ -48,9 +48,16 @@ public class PaymentProcessingService {
 
     @Transactional(noRollbackFor = PaymentGatewayException.class)
     public CheckoutResult checkout(Long orderId) {
-        OrderResponse order = orderService.getOrderById(orderId);
+        OrderResponse order = orderService.getOrderForCheckout(orderId);
         if (!"PENDING".equals(order.getStatus())) {
             throw new IllegalStateException("Only PENDING orders can be checked out.");
+        }
+        boolean activeAttempt = paymentRepository.findByOrderIdOrderByCreatedAtDesc(orderId).stream()
+                .anyMatch(payment -> payment.getProvider() == PaymentProvider.PAYCHANGU
+                        && payment.getStatus() == PaymentStatus.PENDING);
+        if (activeAttempt) {
+            throw new IllegalStateException(
+                    "A payment attempt is already pending for this order. Verify its status before retrying.");
         }
 
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -72,8 +79,17 @@ public class PaymentProcessingService {
         payment.setCreatedAt(LocalDateTime.now());
         paymentRepository.save(payment);
 
-        String checkoutUrl = payChanguService.initiateCheckout(
-                order.getTotalAmount(), email, names[0], names[1], orderId, txRef);
+        String checkoutUrl;
+        try {
+            checkoutUrl = payChanguService.initiateCheckout(
+                    order.getTotalAmount(), email, names[0], names[1], orderId, txRef);
+        } catch (PaymentGatewayException exception) {
+            if (exception.isDefinitiveRejection()) {
+                payment.setStatus(PaymentStatus.FAILED);
+                paymentRepository.save(payment);
+            }
+            throw exception;
+        }
         return new CheckoutResult(order.getTotalAmount(), txRef, checkoutUrl);
     }
 

@@ -179,6 +179,17 @@ public class OrderService {
     }
 
     @Transactional
+    public OrderResponse getOrderForCheckout(Long orderId) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new NotFoundException("Order not found."));
+        if (!order.getUser().getEmail().equals(email)) {
+            throw new AccessDeniedException("You are not authorized to view this order.");
+        }
+        return mapToResponse(order);
+    }
+
+    @Transactional
     public void updateOrderStatus(Long orderId, Order.OrderStatus newStatus) {
         Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found."));

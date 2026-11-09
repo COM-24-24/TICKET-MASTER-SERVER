@@ -40,6 +40,7 @@ Send authenticated requests with `Authorization: Bearer <token>`. JSON request a
 | `POST /api/payments/verify` | CUSTOMER order owner | Verify payment server-side and return order/tickets |
 | `GET /api/payments/callback?tx_ref={txRef}` | Public gateway callback | Verify the transaction server-side, then redirect to the app |
 | `GET /api/payments/return?tx_ref={txRef}&status={ignored}` | Public gateway return | Ignore gateway-supplied status, verify, then redirect |
+| `POST /api/payments/webhook` | Public, signature-verified gateway notification | Verify the raw-body `Signature` HMAC and re-query PayChangu |
 | `POST /api/dev/orders/{orderId}/mark-paid` | CUSTOMER order owner; only `dev` with demo enabled | Simulate a paid order |
 | `GET /api/tickets/my` | Authenticated owner | List own tickets |
 | `GET /api/tickets/{id}` | Authenticated owner | Read a ticket |

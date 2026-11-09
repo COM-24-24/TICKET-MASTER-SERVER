@@ -1,8 +1,12 @@
 services:
   # Database Service
-  mariadb:
+  db:
     image: mariadb:11.8
     container_name: ticketmaster-db
+    networks:
+      default:
+        aliases:
+          - mariadb
     environment:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
       MARIADB_DATABASE: ${MARIADB_DATABASE}
@@ -13,7 +17,7 @@ services:
     volumes:
       - ticketmaster_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -u root -p\"$${MARIADB_ROOT_PASSWORD}\""]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -37,8 +41,10 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       JWT_SECRET: ${JWT_SECRET}
       PAYCHANGU_SECRET_KEY: ${PAYCHANGU_SECRET_KEY}
+      PAYCHANGU_BASE_URL: ${PAYCHANGU_BASE_URL:-https://api.paychangu.com}
       PAYCHANGU_CALLBACK_URL: ${PAYCHANGU_CALLBACK_URL}
       PAYCHANGU_RETURN_URL: ${PAYCHANGU_RETURN_URL}
+      PAYCHANGU_WEBHOOK_SECRET: ${PAYCHANGU_WEBHOOK_SECRET:-}
     volumes:
       - ticketmaster_uploads:/app/uploads
     healthcheck:
@@ -48,7 +54,7 @@ services:
       retries: 10
       start_period: 30s
     depends_on:
-      mariadb:
+      db:
         condition: service_healthy
 
 volumes:

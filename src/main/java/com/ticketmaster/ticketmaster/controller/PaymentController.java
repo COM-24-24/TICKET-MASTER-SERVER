@@ -1,6 +1,11 @@
-package com.ticketmaster.ticketmaster.payment;
+package com.ticketmaster.ticketmaster.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
+import com.ticketmaster.ticketmaster.payment.PayChanguService;
+import com.ticketmaster.ticketmaster.payment.PaymentGatewayException;
+import com.ticketmaster.ticketmaster.payment.PaymentProcessingService;
 import com.ticketmaster.ticketmaster.payment.dto.CheckoutRequest;
 import com.ticketmaster.ticketmaster.payment.dto.CheckoutResponse;
 import com.ticketmaster.ticketmaster.payment.dto.PaidOrderResponse;
@@ -11,6 +16,7 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriUtils;
@@ -25,12 +31,18 @@ public class PaymentController {
     private static final Logger logger = LoggerFactory.getLogger(PaymentController.class);
 
     private final PaymentProcessingService paymentProcessingService;
+    private final PayChanguService payChanguService;
+    private final ObjectMapper objectMapper;
     private final String appRedirectUri;
 
     public PaymentController(
             PaymentProcessingService paymentProcessingService,
+            PayChanguService payChanguService,
+            ObjectMapper objectMapper,
             @Value("${app.payment.app-redirect-uri:myapp://payment-result}") String appRedirectUri) {
         this.paymentProcessingService = paymentProcessingService;
+        this.payChanguService = payChanguService;
+        this.objectMapper = objectMapper;
         this.appRedirectUri = appRedirectUri;
     }
 
@@ -50,6 +62,33 @@ public class PaymentController {
         PaymentProcessingService.PaidOrderResult result =
                 paymentProcessingService.verifyOrder(request.orderId());
         return new PaidOrderResponse(result.order(), result.tickets(), result.paymentStatus());
+    }
+
+    @PostMapping("/webhook")
+    @Operation(summary = "Verify signed PayChangu webhook notifications")
+    public ResponseEntity<Void> webhook(
+            @RequestHeader(value = "Signature", required = false) String signature,
+            @RequestBody byte[] payload) {
+        if (!payChanguService.isWebhookConfigured()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+        if (!payChanguService.isValidWebhookSignature(payload, signature)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        JsonNode event;
+        try {
+            event = objectMapper.readTree(payload);
+        } catch (IOException exception) {
+            return ResponseEntity.badRequest().build();
+        }
+        JsonNode txRef = event == null ? null : event.get("tx_ref");
+        if (txRef == null || !txRef.isTextual() || txRef.asText().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        paymentProcessingService.verifyTxRef(txRef.asText());
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/callback")
@@ -74,8 +113,11 @@ public class PaymentController {
     private String bestEffortVerify(String txRef) {
         try {
             return paymentProcessingService.verifyTxRef(txRef);
-        } catch (PaymentGatewayException | NotFoundException | IllegalStateException exception) {
+        } catch (PaymentGatewayException | IllegalStateException exception) {
             logger.warn("Unable to verify PayChangu callback.");
+            return "pending";
+        } catch (NotFoundException exception) {
+            logger.warn("PayChangu callback referenced an unknown transaction.");
             return "failed";
         }
     }

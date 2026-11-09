@@ -1,6 +1,7 @@
 package com.ticketmaster.ticketmaster.payment;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -14,9 +15,12 @@ import org.springframework.web.util.UriUtils;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 @Service
 public class PayChanguService {
@@ -25,22 +29,32 @@ public class PayChanguService {
     private final String baseUrl;
     private final String callbackUrl;
     private final String returnUrl;
+    private final String webhookSecret;
     private final RestTemplate restTemplate;
 
+    @Autowired
     public PayChanguService(
             RestTemplateBuilder restTemplateBuilder,
             @Value("${paychangu.secret-key}") String secretKey,
             @Value("${paychangu.base-url}") String baseUrl,
             @Value("${paychangu.callback-url}") String callbackUrl,
-            @Value("${paychangu.return-url}") String returnUrl) {
+            @Value("${paychangu.return-url}") String returnUrl,
+            @Value("${paychangu.webhook-secret:}") String webhookSecret) {
+        this(secretKey, baseUrl, callbackUrl, returnUrl, webhookSecret,
+                restTemplateBuilder.setConnectTimeout(Duration.ofSeconds(5))
+                        .setReadTimeout(Duration.ofSeconds(15))
+                        .build());
+    }
+
+    PayChanguService(
+            String secretKey, String baseUrl, String callbackUrl, String returnUrl,
+            String webhookSecret, RestTemplate restTemplate) {
         this.secretKey = secretKey;
         this.baseUrl = baseUrl;
         this.callbackUrl = callbackUrl;
         this.returnUrl = returnUrl;
-        this.restTemplate = restTemplateBuilder
-                .setConnectTimeout(Duration.ofSeconds(5))
-                .setReadTimeout(Duration.ofSeconds(15))
-                .build();
+        this.webhookSecret = webhookSecret;
+        this.restTemplate = restTemplate;
     }
 
     public String initiateCheckout(
@@ -70,7 +84,12 @@ public class PayChanguService {
             throw new PaymentGatewayException(exception);
         }
 
-        Object data = response.getBody() == null ? null : response.getBody().get("data");
+        Map<?, ?> responseBody = response.getBody();
+        if (responseBody == null || !"success".equalsIgnoreCase(
+                String.valueOf(responseBody.get("status")))) {
+            throw new PaymentGatewayException();
+        }
+        Object data = responseBody.get("data");
         if (!(data instanceof Map<?, ?> dataMap)
                 || !(dataMap.get("checkout_url") instanceof String checkoutUrl)
                 || checkoutUrl.isBlank()) {
@@ -109,9 +128,29 @@ public class PayChanguService {
         }
     }
 
+    public boolean isWebhookConfigured() {
+        return webhookSecret != null && !webhookSecret.isBlank();
+    }
+
+    public boolean isValidWebhookSignature(byte[] payload, String signature) {
+        if (!isWebhookConfigured() || signature == null || signature.isBlank()) {
+            return false;
+        }
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] expected = java.util.HexFormat.of().formatHex(mac.doFinal(payload))
+                    .getBytes(StandardCharsets.US_ASCII);
+            return MessageDigest.isEqual(expected, signature.getBytes(StandardCharsets.US_ASCII));
+        } catch (java.security.GeneralSecurityException exception) {
+            throw new IllegalStateException("Unable to validate PayChangu webhook signature.", exception);
+        }
+    }
+
     private HttpHeaders headers() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(java.util.List.of(MediaType.APPLICATION_JSON));
         headers.setBearerAuth(secretKey);
         return headers;
     }

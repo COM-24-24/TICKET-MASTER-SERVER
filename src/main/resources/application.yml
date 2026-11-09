@@ -39,9 +39,10 @@ google:
 
 paychangu:
   secret-key: ${PAYCHANGU_SECRET_KEY}
-  base-url: https://api.paychangu.com
+  base-url: ${PAYCHANGU_BASE_URL:https://api.paychangu.com}
   callback-url: ${PAYCHANGU_CALLBACK_URL:http://localhost:8080/api/payments/callback}
   return-url: ${PAYCHANGU_RETURN_URL:http://localhost:8080/api/payments/return}
+  webhook-secret: ${PAYCHANGU_WEBHOOK_SECRET:}
   
 springdoc:
   swagger-ui:

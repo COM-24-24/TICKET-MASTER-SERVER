@@ -96,7 +96,7 @@ Stores the ticket types and quantities included in an order, including the unit 
 
 ### 3.9 `payments`
 
-Stores payment results, amounts, methods, unique references, and timestamps. The current schema permits one payment record per order because `order_id` is unique.
+Stores payment attempts, amounts, provider, transaction references, payment status, and timestamps. `tx_ref` is unique, while `order_id` is indexed but not unique so an order can have multiple attempts. Existing databases created from the legacy SQL schema must apply [`20261109_payments_table.sql`](./database/migrations/20261109_payments_table.sql). If Hibernate has already renamed the payment columns but `status` is still an ENUM that excludes `PENDING`, apply [`20261109_payment_status_varchar.sql`](./database/migrations/20261109_payment_status_varchar.sql). Back up the database before either migration.
 
 ### 3.10 `tickets`
 
@@ -119,7 +119,7 @@ Allowed statuses:
 - One customer can place many orders.
 - One order can contain many order items.
 - One ticket type can appear in many order items.
-- One order can have at most one payment record under the current schema.
+- One order can have multiple payment attempts.
 - One order can issue many digital tickets.
 - One ticket type can correspond to many digital tickets.
 - One user can own many tickets.

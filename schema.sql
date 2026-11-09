@@ -115,13 +115,16 @@ CREATE TABLE IF NOT EXISTS order_items (
 -- 8. Payments
 CREATE TABLE IF NOT EXISTS payments (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    order_id BIGINT NOT NULL UNIQUE,
+    order_id BIGINT NOT NULL,
     amount DECIMAL(12,2) NOT NULL,
-    method VARCHAR(50) NOT NULL DEFAULT 'MOCK',
-    status ENUM('SUCCESS', 'FAILED') NOT NULL,
-    reference VARCHAR(150) NOT NULL UNIQUE,
+    tx_ref VARCHAR(150) UNIQUE,
+    provider VARCHAR(20),
+    status VARCHAR(20) NOT NULL,
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    order_status_updated BOOLEAN NOT NULL DEFAULT FALSE,
+    order_status_update_error VARCHAR(500),
     FOREIGN KEY (order_id) REFERENCES orders(id),
+    INDEX idx_payment_order_created (order_id, created_at),
     CHECK (amount >= 0)
 ) ENGINE=InnoDB;
 

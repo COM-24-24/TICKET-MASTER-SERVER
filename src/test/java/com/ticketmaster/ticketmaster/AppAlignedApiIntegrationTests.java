@@ -17,6 +17,7 @@ import com.ticketmaster.ticketmaster.order.service.OrderService;
 import com.ticketmaster.ticketmaster.security.CustomUserDetailsService;
 import com.ticketmaster.ticketmaster.security.JwtService;
 import com.ticketmaster.ticketmaster.payment.PayChanguService;
+import com.ticketmaster.ticketmaster.payment.PaymentGatewayException;
 import com.ticketmaster.ticketmaster.repository.PaymentRepository;
 import com.ticketmaster.ticketmaster.ticket.TicketRepository;
 import com.ticketmaster.ticketmaster.user.entity.User;
@@ -306,6 +307,16 @@ class AppAlignedApiIntegrationTests {
                 new BigDecimal("2500.00"), "payment-owner@example.test",
                 "Payment", "Owner", orderId, txRef);
 
+        mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(
+                        "A payment attempt is already pending for this order. Verify its status before retrying."));
+        verify(payChanguService, times(1)).initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString());
+
         when(payChanguService.verify(txRef)).thenReturn(
                 new PayChanguService.Verification(txRef, "success", "MWK", new BigDecimal("2500.00")));
         mockMvc.perform(post("/api/payments/verify")
@@ -336,6 +347,55 @@ class AppAlignedApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tickets.length()").value(2));
         verify(payChanguService, times(1)).verify(txRef);
+
+        mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void checkoutRejectsMissingAndForeignOrders() throws Exception {
+        JsonNode ownerAuth = register("checkout-owner@example.test", "Checkout Owner");
+        JsonNode otherAuth = register("checkout-other@example.test", "Checkout Other");
+        User owner = userRepository.findByEmail("checkout-owner@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Checkout Access Event", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType type = saveTicketType(event, "Standard", "100.00", 2, 0);
+        JsonNode order = createOrder(bearer(ownerAuth), event.getId(), type.getId(), 1);
+        long orderId = order.path("id").asLong();
+
+        mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", bearer(ownerAuth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", Long.MAX_VALUE))))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", bearer(otherAuth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(payChanguService);
+    }
+
+    @Test
+    void webhookRequiresConfiguredSecretAndValidSignature() throws Exception {
+        byte[] payload = "{\"tx_ref\":\"unknown-reference\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        mockMvc.perform(post("/api/payments/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isServiceUnavailable());
+
+        when(payChanguService.isWebhookConfigured()).thenReturn(true);
+        when(payChanguService.isValidWebhookSignature(any(byte[].class), eq("invalid")))
+                .thenReturn(false);
+        mockMvc.perform(post("/api/payments/webhook")
+                        .header("Signature", "invalid")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isUnauthorized());
+        verify(payChanguService, never()).verify(anyString());
     }
 
     @Test
@@ -359,6 +419,42 @@ class AppAlignedApiIntegrationTests {
                 .andExpect(jsonPath("$.message").value("Payment service unavailable."));
         assertEquals(PaymentStatus.PENDING,
                 paymentRepository.findByOrderIdOrderByCreatedAtDesc(orderId).get(0).getStatus());
+    }
+
+    @Test
+    void definitiveGatewayRejectionMarksAttemptFailedAndAllowsRetry() throws Exception {
+        JsonNode customer = register("gateway-rejected-owner@example.test", "Gateway Rejected");
+        User owner = userRepository.findByEmail("gateway-rejected-owner@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Gateway Rejected Event", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType type = saveTicketType(event, "Standard", "100.00", 2, 0);
+        String authorization = bearer(customer);
+        JsonNode order = createOrder(authorization, event.getId(), type.getId(), 1);
+        Long orderId = order.path("id").asLong();
+        when(payChanguService.initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
+                .thenThrow(new PaymentGatewayException(
+                        new org.springframework.web.client.HttpClientErrorException(
+                                org.springframework.http.HttpStatus.UNAUTHORIZED)));
+
+        mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isBadGateway());
+        assertEquals(PaymentStatus.FAILED,
+                paymentRepository.findByOrderIdOrderByCreatedAtDesc(orderId).get(0).getStatus());
+
+        when(payChanguService.initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
+                .thenReturn("https://checkout.example.test/session");
+        mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.checkoutUrl").value("https://checkout.example.test/session"));
+        assertEquals(2, paymentRepository.findByOrderIdOrderByCreatedAtDesc(orderId).size());
     }
 
     @Test
@@ -468,6 +564,15 @@ class AppAlignedApiIntegrationTests {
         when(payChanguService.verify(txRef)).thenReturn(
                 new PayChanguService.Verification(txRef, "success", "MWK", new BigDecimal("100.00")));
 
+        when(payChanguService.isWebhookConfigured()).thenReturn(true);
+        when(payChanguService.isValidWebhookSignature(any(byte[].class), eq("valid-signature")))
+                .thenReturn(true);
+        mockMvc.perform(post("/api/payments/webhook")
+                        .header("Signature", "valid-signature")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("tx_ref", txRef, "status", "failed"))))
+                .andExpect(status().isOk());
+
         mockMvc.perform(get("/api/payments/callback").param("tx_ref", txRef))
                 .andExpect(status().isFound())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
@@ -497,6 +602,38 @@ class AppAlignedApiIntegrationTests {
                         .content(validationRequest))
                 .andExpect(status().isConflict());
         assertEquals(1, ticketRepository.count());
+        verify(payChanguService, times(1)).verify(txRef);
+    }
+
+    @Test
+    void returnUrlIgnoresGatewaySuppliedStatusAndUsesVerifiedStatus() throws Exception {
+        JsonNode customer = register("return-owner@example.test", "Return Owner");
+        User owner = userRepository.findByEmail("return-owner@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Return URL Event", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType type = saveTicketType(event, "Standard", "100.00", 3, 0);
+        JsonNode order = createOrder(bearer(customer), event.getId(), type.getId(), 1);
+        Long orderId = order.path("id").asLong();
+        when(payChanguService.initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
+                .thenReturn("https://checkout.example.test/session");
+        MvcResult checkout = mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String txRef = objectMapper.readTree(checkout.getResponse().getContentAsString())
+                .path("txRef").asText();
+        when(payChanguService.verify(txRef)).thenReturn(
+                new PayChanguService.Verification(txRef, "success", "MWK", new BigDecimal("100.00")));
+
+        mockMvc.perform(get("/api/payments/return")
+                        .param("tx_ref", txRef)
+                        .param("status", "failed"))
+                .andExpect(status().isFound())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .redirectedUrl("myapp://payment-result?status=success&tx_ref=" + txRef));
         verify(payChanguService, times(1)).verify(txRef);
     }
 

@@ -11,10 +11,14 @@ import com.ticketmaster.ticketmaster.events.entity.EventRepository;
 import com.ticketmaster.ticketmaster.events.entity.EventStatus;
 import com.ticketmaster.ticketmaster.events.entity.TicketType;
 import com.ticketmaster.ticketmaster.events.entity.TicketTypeRepository;
+import com.ticketmaster.ticketmaster.order.entity.Order;
+import com.ticketmaster.ticketmaster.order.repository.OrderRepository;
+import com.ticketmaster.ticketmaster.order.service.OrderService;
 import com.ticketmaster.ticketmaster.security.CustomUserDetailsService;
 import com.ticketmaster.ticketmaster.security.JwtService;
 import com.ticketmaster.ticketmaster.payment.PayChanguService;
 import com.ticketmaster.ticketmaster.repository.PaymentRepository;
+import com.ticketmaster.ticketmaster.ticket.TicketRepository;
 import com.ticketmaster.ticketmaster.user.entity.User;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -28,6 +32,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -37,10 +42,15 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -75,6 +85,12 @@ class AppAlignedApiIntegrationTests {
     private TicketTypeRepository ticketTypeRepository;
 
     @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private OrderService orderService;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -85,6 +101,9 @@ class AppAlignedApiIntegrationTests {
 
     @Autowired
     private PaymentRepository paymentRepository;
+
+    @Autowired
+    private TicketRepository ticketRepository;
 
     @MockBean
     private PayChanguService payChanguService;
@@ -245,6 +264,14 @@ class AppAlignedApiIntegrationTests {
     }
 
     @Test
+    void demoPaymentEndpointIsAbsentOutsideDevProfile() throws Exception {
+        JsonNode customer = register("demo-disabled@example.test", "Demo Disabled");
+        mockMvc.perform(post("/api/dev/orders/123/mark-paid")
+                        .header("Authorization", bearer(customer)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void checkoutUsesDatabaseAmountAndVerificationIssuesTicketsOnce() throws Exception {
         JsonNode customer = register("payment-owner@example.test", "Payment Owner");
         User owner = userRepository.findByEmail("payment-owner@example.test").orElseThrow();
@@ -309,6 +336,178 @@ class AppAlignedApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tickets.length()").value(2));
         verify(payChanguService, times(1)).verify(txRef);
+    }
+
+    @Test
+    void orderRejectsForeignTicketTypesAndExcessQuantityAndProtectsOwnership() throws Exception {
+        JsonNode ownerAuth = register("order-owner@example.test", "Order Owner");
+        JsonNode otherAuth = register("order-other@example.test", "Order Other");
+        User owner = userRepository.findByEmail("order-owner@example.test").orElseThrow();
+        Event firstEvent = saveEvent(owner, "Order Event One", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        Event secondEvent = saveEvent(owner, "Order Event Two", "Music", "Arena",
+                "Blantyre", EventStatus.PUBLISHED, 4);
+        TicketType firstType = saveTicketType(firstEvent, "Standard", "120.00", 20, 0);
+        TicketType secondType = saveTicketType(secondEvent, "VIP", "240.00", 20, 0);
+        String ownerToken = bearer(ownerAuth);
+
+        mockMvc.perform(post("/api/orders")
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "eventId", firstEvent.getId(),
+                                "items", List.of(Map.of(
+                                        "ticketTypeId", secondType.getId(), "quantity", 1))))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("does not belong")));
+
+        mockMvc.perform(post("/api/orders")
+                        .header("Authorization", ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "eventId", firstEvent.getId(),
+                                "items", List.of(Map.of(
+                                        "ticketTypeId", firstType.getId(), "quantity", 11))))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("more than 10 tickets")));
+
+        JsonNode order = createOrder(ownerToken, firstEvent.getId(), firstType.getId(), 1);
+        mockMvc.perform(get("/api/orders/{id}", order.path("id").asLong())
+                        .header("Authorization", bearer(otherAuth)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void expiringPendingOrderReleasesReservedStock() throws Exception {
+        JsonNode customer = register("expiry-owner@example.test", "Expiry Owner");
+        User owner = userRepository.findByEmail("expiry-owner@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Expiry Event", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType type = saveTicketType(event, "Standard", "100.00", 5, 0);
+        JsonNode orderResponse = createOrder(bearer(customer), event.getId(), type.getId(), 2);
+        Order order = orderRepository.findById(orderResponse.path("id").asLong()).orElseThrow();
+        order.setCreatedAt(LocalDateTime.now().minusMinutes(60));
+        orderRepository.saveAndFlush(order);
+
+        orderService.expirePendingOrders();
+
+        assertEquals(Order.OrderStatus.CANCELLED,
+                orderRepository.findById(order.getId()).orElseThrow().getStatus());
+        assertEquals(0, ticketTypeRepository.findById(type.getId()).orElseThrow().getQuantitySold());
+    }
+
+    @Test
+    void paymentVerificationRejectsWrongTransactionReference() throws Exception {
+        assertInvalidPaymentVerification("wrong-ref", "different-ref", "success", "MWK",
+                new BigDecimal("100.00"), 409, "PENDING");
+    }
+
+    @Test
+    void paymentVerificationRejectsWrongCurrency() throws Exception {
+        assertInvalidPaymentVerification("wrong-currency", null, "success", "USD",
+                new BigDecimal("100.00"), 409, "PENDING");
+    }
+
+    @Test
+    void paymentVerificationRejectsAmountBelowOrderTotal() throws Exception {
+        assertInvalidPaymentVerification("low-amount", null, "success", "MWK",
+                new BigDecimal("99.99"), 409, "PENDING");
+    }
+
+    @Test
+    void failedGatewayVerificationLeavesOrderPending() throws Exception {
+        assertInvalidPaymentVerification("failed-payment", null, "failed", "MWK",
+                new BigDecimal("100.00"), 200, "FAILED");
+    }
+
+    @Test
+    void callbackThenVerifyIssuesTicketsOnlyOnce() throws Exception {
+        JsonNode customer = register("callback-owner@example.test", "Callback Owner");
+        User owner = userRepository.findByEmail("callback-owner@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Callback Event", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType type = saveTicketType(event, "Standard", "100.00", 5, 0);
+        JsonNode order = createOrder(bearer(customer), event.getId(), type.getId(), 1);
+        Long orderId = order.path("id").asLong();
+        when(payChanguService.initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
+                .thenReturn("https://checkout.example.test/session");
+        MvcResult checkout = mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String txRef = objectMapper.readTree(checkout.getResponse().getContentAsString())
+                .path("txRef").asText();
+        when(payChanguService.verify(txRef)).thenReturn(
+                new PayChanguService.Verification(txRef, "success", "MWK", new BigDecimal("100.00")));
+
+        mockMvc.perform(get("/api/payments/callback").param("tx_ref", txRef))
+                .andExpect(status().isFound())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .redirectedUrl("myapp://payment-result?status=success&tx_ref=" + txRef));
+        MvcResult verified = mockMvc.perform(post("/api/payments/verify")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tickets.length()").value(1))
+                .andReturn();
+        String ticketCode = objectMapper.readTree(verified.getResponse().getContentAsString())
+                .path("tickets").get(0).path("ticketCode").asText();
+        User validator = saveUser("ticket-validator@example.test", User.Role.VALIDATOR);
+        String validatorToken = "Bearer " + jwtService.generateToken(
+                userDetailsService.loadUserByUsername(validator.getEmail()));
+        String validationRequest = json(Map.of("ticketCode", ticketCode));
+        mockMvc.perform(post("/api/tickets/validate")
+                        .header("Authorization", validatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validationRequest))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("USED"));
+        mockMvc.perform(post("/api/tickets/validate")
+                        .header("Authorization", validatorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validationRequest))
+                .andExpect(status().isConflict());
+        assertEquals(1, ticketRepository.count());
+        verify(payChanguService, times(1)).verify(txRef);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentOrdersCannotReserveMoreThanAvailableStock() throws Exception {
+        JsonNode customer = register("concurrent-owner@example.test", "Concurrent Owner");
+        User owner = userRepository.findByEmail("concurrent-owner@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Concurrent Event", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType type = saveTicketType(event, "Single", "100.00", 1, 0);
+        String token = bearer(customer);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Integer> first = executor.submit(() -> placeConcurrentOrder(
+                    start, token, event.getId(), type.getId()));
+            Future<Integer> second = executor.submit(() -> placeConcurrentOrder(
+                    start, token, event.getId(), type.getId()));
+            start.countDown();
+            List<Integer> statuses = List.of(first.get(), second.get());
+            assertEquals(1L, statuses.stream().filter(code -> code == 200).count());
+            assertEquals(1L, statuses.stream().filter(code -> code == 400).count());
+            assertEquals(1, ticketTypeRepository.findById(type.getId()).orElseThrow().getQuantitySold());
+            assertTrue(ticketTypeRepository.findById(type.getId()).orElseThrow().getQuantitySold()
+                    <= type.getTotalQuantity());
+        } finally {
+            executor.shutdownNow();
+            orderRepository.deleteAll(orderRepository.findByUserIdOrderByCreatedAtDesc(owner.getId()));
+            ticketTypeRepository.delete(type);
+            eventRepository.delete(event);
+            customerProfileRepository.findByUserId(owner.getId()).ifPresent(customerProfileRepository::delete);
+            userRepository.delete(owner);
+        }
     }
 
     @Test
@@ -484,6 +683,64 @@ class AppAlignedApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andReturn();
         return objectMapper.readTree(result.getResponse().getContentAsString());
+    }
+
+    private void assertInvalidPaymentVerification(
+            String suffix, String returnedTxRef, String gatewayStatus, String currency,
+            BigDecimal amount, int expectedHttpStatus, String expectedPaymentStatus) throws Exception {
+        JsonNode customer = register(suffix + "@example.test", "Verification Owner");
+        User owner = userRepository.findByEmail(suffix + "@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Verify Event " + suffix, "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType type = saveTicketType(event, "Standard", "100.00", 3, 0);
+        JsonNode order = createOrder(bearer(customer), event.getId(), type.getId(), 1);
+        Long orderId = order.path("id").asLong();
+        when(payChanguService.initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
+                .thenReturn("https://checkout.example.test/session");
+        MvcResult checkout = mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String txRef = objectMapper.readTree(checkout.getResponse().getContentAsString())
+                .path("txRef").asText();
+        when(payChanguService.verify(txRef)).thenReturn(
+                new PayChanguService.Verification(
+                        returnedTxRef == null ? txRef : returnedTxRef,
+                        gatewayStatus, currency, amount));
+
+        var result = mockMvc.perform(post("/api/payments/verify")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().is(expectedHttpStatus))
+                .andReturn();
+        if (expectedHttpStatus == 200) {
+            assertEquals(expectedPaymentStatus,
+                    objectMapper.readTree(result.getResponse().getContentAsString())
+                            .path("paymentStatus").asText());
+        } else {
+            assertEquals("Payment verification did not match this order.",
+                    objectMapper.readTree(result.getResponse().getContentAsString())
+                            .path("message").asText());
+        }
+    }
+
+    private int placeConcurrentOrder(
+            CountDownLatch start, String authorization, Long eventId, Long ticketTypeId) throws Exception {
+        start.await();
+        return mockMvc.perform(post("/api/orders")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "eventId", eventId,
+                                "items", List.of(Map.of(
+                                        "ticketTypeId", ticketTypeId, "quantity", 1))))))
+                .andReturn()
+                .getResponse()
+                .getStatus();
     }
 
     private void assertAnonymousUnauthorized(

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketmaster.ticketmaster.customer.CustomerProfile;
 import com.ticketmaster.ticketmaster.customer.CustomerProfileRepository;
+import com.ticketmaster.ticketmaster.entity.Payment;
+import com.ticketmaster.ticketmaster.entity.PaymentStatus;
 import com.ticketmaster.ticketmaster.events.entity.Event;
 import com.ticketmaster.ticketmaster.events.entity.EventRepository;
 import com.ticketmaster.ticketmaster.events.entity.EventStatus;
@@ -11,6 +13,8 @@ import com.ticketmaster.ticketmaster.events.entity.TicketType;
 import com.ticketmaster.ticketmaster.events.entity.TicketTypeRepository;
 import com.ticketmaster.ticketmaster.security.CustomUserDetailsService;
 import com.ticketmaster.ticketmaster.security.JwtService;
+import com.ticketmaster.ticketmaster.payment.PayChanguService;
+import com.ticketmaster.ticketmaster.repository.PaymentRepository;
 import com.ticketmaster.ticketmaster.user.entity.User;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -20,6 +24,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -31,10 +36,13 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Base64;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -74,6 +82,12 @@ class AppAlignedApiIntegrationTests {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private PaymentRepository paymentRepository;
+
+    @MockBean
+    private PayChanguService payChanguService;
 
     @Test
     void registrationDefaultsToCustomerReturnsUserAndRejectsDuplicateAndPrivilegedRoles() throws Exception {
@@ -231,6 +245,61 @@ class AppAlignedApiIntegrationTests {
     }
 
     @Test
+    void checkoutUsesDatabaseAmountAndVerificationIssuesTicketsOnce() throws Exception {
+        JsonNode customer = register("payment-owner@example.test", "Payment Owner");
+        User owner = userRepository.findByEmail("payment-owner@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Payment Event", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType ticketType = saveTicketType(event, "Standard", "1250.00", 10, 0);
+        String authorization = bearer(customer);
+        JsonNode order = createOrder(authorization, event.getId(), ticketType.getId(), 2);
+        Long orderId = order.path("id").asLong();
+
+        when(payChanguService.initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
+                .thenReturn("https://checkout.example.test/session");
+        MvcResult checkoutResult = mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId, "amount", 1))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.orderId").value(orderId))
+                .andExpect(jsonPath("$.amount").value(2500.0))
+                .andExpect(jsonPath("$.currency").value("MWK"))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.checkoutUrl").value("https://checkout.example.test/session"))
+                .andReturn();
+
+        JsonNode checkout = objectMapper.readTree(checkoutResult.getResponse().getContentAsString());
+        String txRef = checkout.path("txRef").asText();
+        Payment payment = paymentRepository.findByTxRef(txRef).orElseThrow();
+        assertEquals(PaymentStatus.PENDING, payment.getStatus());
+        assertEquals("2500.0", payment.getAmount().toString());
+        verify(payChanguService).initiateCheckout(
+                new BigDecimal("2500.00"), "payment-owner@example.test",
+                "Payment", "Owner", orderId, txRef);
+
+        when(payChanguService.verify(txRef)).thenReturn(
+                new PayChanguService.Verification(txRef, "success", "MWK", new BigDecimal("2500.00")));
+        mockMvc.perform(post("/api/payments/verify")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.order.status").value("PAID"))
+                .andExpect(jsonPath("$.paymentStatus").value("PAID"))
+                .andExpect(jsonPath("$.tickets.length()").value(2));
+
+        mockMvc.perform(post("/api/payments/verify")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tickets.length()").value(2));
+        verify(payChanguService, times(1)).verify(txRef);
+    }
+
+    @Test
     void unknownOrderTicketAndTicketTypeReturnNotFound() throws Exception {
         JsonNode customer = register("missing-resource@example.test", "Customer");
         String authorization = bearer(customer);
@@ -380,14 +449,29 @@ class AppAlignedApiIntegrationTests {
         return eventRepository.save(event);
     }
 
-    private void saveTicketType(Event event, String name, String price, int capacity, int sold) {
+    private TicketType saveTicketType(Event event, String name, String price, int capacity, int sold) {
         TicketType ticketType = new TicketType();
         ticketType.setEvent(event);
         ticketType.setName(name);
         ticketType.setPrice(new BigDecimal(price));
         ticketType.setTotalQuantity(capacity);
         ticketType.setQuantitySold(sold);
-        ticketTypeRepository.save(ticketType);
+        return ticketTypeRepository.save(ticketType);
+    }
+
+    private JsonNode createOrder(String authorization, Long eventId, Long ticketTypeId, int quantity)
+            throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/orders")
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "eventId", eventId,
+                                "items", List.of(Map.of(
+                                        "ticketTypeId", ticketTypeId,
+                                        "quantity", quantity))))))
+                .andExpect(status().isOk())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString());
     }
 
     private void assertAnonymousUnauthorized(

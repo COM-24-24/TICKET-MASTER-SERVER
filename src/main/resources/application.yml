@@ -52,6 +52,8 @@ logging:
     org.springframework.security: INFO
 
 app:
+  payment:
+    app-redirect-uri: ${APP_PAYMENT_REDIRECT_URI:myapp://payment-result}
   registration:
     allow-privileged-roles: false
   demo-payment:

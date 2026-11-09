@@ -13,6 +13,10 @@ public class Payment {
     private Long orderId;
     @Column(nullable = false)
     private Double amount;
+    @Column(unique = true)
+    private String txRef;
+    @Enumerated(EnumType.STRING)
+    private PaymentProvider provider;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PaymentStatus status;
@@ -29,6 +33,10 @@ public class Payment {
     public void setOrderId(Long orderId) { this.orderId = orderId; }
     public Double getAmount() { return amount; }
     public void setAmount(Double amount) { this.amount = amount; }
+    public String getTxRef() { return txRef; }
+    public void setTxRef(String txRef) { this.txRef = txRef; }
+    public PaymentProvider getProvider() { return provider; }
+    public void setProvider(PaymentProvider provider) { this.provider = provider; }
     public PaymentStatus getStatus() { return status; }
     public void setStatus(PaymentStatus status) { this.status = status; }
     public LocalDateTime getCreatedAt() { return createdAt; }

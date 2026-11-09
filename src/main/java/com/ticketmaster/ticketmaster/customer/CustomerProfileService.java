@@ -1,48 +1,47 @@
 package com.ticketmaster.ticketmaster.customer;
 
+import com.ticketmaster.ticketmaster.user.entity.User;
+import com.ticketmaster.ticketmaster.user.repository.UserRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class CustomerProfileService {
 
     private final CustomerProfileRepository repo;
+    private final UserRepository userRepository;
 
-    public CustomerProfileService(CustomerProfileRepository repo) {
+    public CustomerProfileService(CustomerProfileRepository repo, UserRepository userRepository) {
         this.repo = repo;
+        this.userRepository = userRepository;
     }
 
-    /**
-     * Resolves the current user's id from Spring Security.
-     * For tonight's demo we assume the principal's name is the user id
-     * (or fall back to user id 1 if anonymous, so you can still demo).
-     * We'll tighten this once the team's auth/User module lands.
-     */
     private Long currentUserId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()
                 || "anonymousUser".equals(auth.getPrincipal())) {
-            // DEMO FALLBACK: allows testing in Swagger without auth wired.
-            return 1L;
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required.");
         }
-        try {
-            return Long.valueOf(auth.getName());
-        } catch (NumberFormatException e) {
-            // Principal isn't a numeric id (e.g. email). Use demo fallback
-            // and note this for the team integration step.
-            return 1L;
-        }
+        return userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, "Authenticated user not found."))
+                .getId();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CustomerProfileResponse getMyProfile() {
         Long userId = currentUserId();
         CustomerProfile p = repo.findByUserId(userId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Profile not found for user " + userId
-                                + ". Create it via POST /api/customers/me or the registration hook."));
+                .orElseGet(() -> {
+                    User user = userRepository.findById(userId)
+                            .orElseThrow(() -> new ResponseStatusException(
+                                    HttpStatus.UNAUTHORIZED, "Authenticated user not found."));
+                    return repo.save(new CustomerProfile(userId, emailPrefix(user.getEmail())));
+                });
         return CustomerProfileResponse.from(p);
     }
 
@@ -66,5 +65,18 @@ public class CustomerProfileService {
     public CustomerProfile createForUser(Long userId, String fullName) {
         return repo.findByUserId(userId).orElseGet(() ->
                 repo.save(new CustomerProfile(userId, fullName)));
+    }
+
+    @Transactional(readOnly = true)
+    public String displayNameFor(User user) {
+        return repo.findByUserId(user.getId())
+                .map(CustomerProfile::getFullName)
+                .filter(name -> name != null && !name.isBlank())
+                .orElseGet(() -> emailPrefix(user.getEmail()));
+    }
+
+    private String emailPrefix(String email) {
+        int separator = email.indexOf('@');
+        return separator > 0 ? email.substring(0, separator) : email;
     }
 }

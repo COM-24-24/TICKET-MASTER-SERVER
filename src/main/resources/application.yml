@@ -5,7 +5,7 @@ spring:
   datasource:
     url: jdbc:mariadb://localhost:3306/ticketmaster
     username: root
-    password: root
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.mariadb.jdbc.Driver
 
   jpa:
@@ -16,12 +16,16 @@ spring:
       hibernate:
         format_sql: true
 
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
 server:
   address: 0.0.0.0
   port: 8080
 
 jwt:
-  secret: ThisIsAVeryLongSecretKeyForJWTTokenGenerationChangeInProduction1234567890
+  secret: ${JWT_SECRET}
   expiration: 86400000
 
 google:
@@ -40,4 +44,16 @@ springdoc:
 
 logging:
   level:
-    org.springframework.security: DEBUG
+    org.springframework.security: INFO
+
+app:
+  registration:
+    allow-privileged-roles: false
+  demo-payment:
+    enabled: false
+  orders:
+    max-tickets-per-order: 10
+    pending-minutes: 30
+  uploads-dir: uploads
+  seed:
+    enabled: false

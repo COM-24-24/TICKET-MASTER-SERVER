@@ -4,38 +4,52 @@ services:
     image: mariadb:11.8
     container_name: ticketmaster-db
     environment:
-      MARIADB_ROOT_PASSWORD: root
-      MARIADB_DATABASE: ticketmaster
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${SPRING_DATASOURCE_USERNAME}
+      MARIADB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
       - ticketmaster_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -u root -p\"$${MARIADB_ROOT_PASSWORD}\""]
       interval: 5s
       timeout: 5s
       retries: 10
 
   # Backend Service
   backend:
-    image: zymal/ticketmaster-backend:latest
+    build: .
+    image: ticketmaster-backend:local
     container_name: ticketmaster-backend
     ports:
       - "8080:8080"
+    env_file: .env
     environment:
-      # Database connection (MariaDB driver)
-      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/ticketmaster
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.mariadb.jdbc.Driver
-      
-      # Secrets passed from the .env file
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
       PAYCHANGU_SECRET_KEY: ${PAYCHANGU_SECRET_KEY}
+      PAYCHANGU_CALLBACK_URL: ${PAYCHANGU_CALLBACK_URL}
+      PAYCHANGU_RETURN_URL: ${PAYCHANGU_RETURN_URL}
+    volumes:
+      - ticketmaster_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     depends_on:
       mariadb:
         condition: service_healthy
 
 volumes:
   ticketmaster_data:
+  ticketmaster_uploads:

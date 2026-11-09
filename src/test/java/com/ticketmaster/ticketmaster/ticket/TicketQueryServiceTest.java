@@ -1,6 +1,7 @@
 package com.ticketmaster.ticketmaster.ticket;
 
 import com.ticketmaster.ticketmaster.ticket.dto.TicketResponse;
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,6 +41,7 @@ class TicketQueryServiceTest {
     void getMyTicketByIdReturnsForbiddenWhenTicketIsNotOwnedByCustomer() {
         when(ticketRepository.findByIdAndOwnerId(10L, 7L))
                 .thenReturn(Optional.empty());
+        when(ticketRepository.existsById(10L)).thenReturn(true);
 
         ResponseStatusException exception = assertThrows(
                 ResponseStatusException.class,
@@ -51,15 +53,16 @@ class TicketQueryServiceTest {
     }
 
     @Test
-    void getMyTicketByIdLooksUpTicketUsingBothTicketAndOwnerIds() {
+    void getMyTicketByIdReturnsNotFoundWhenTicketDoesNotExist() {
         when(ticketRepository.findByIdAndOwnerId(10L, 7L))
                 .thenReturn(Optional.empty());
 
         assertThrows(
-                ResponseStatusException.class,
+                NotFoundException.class,
                 () -> ticketQueryService.getMyTicketById(10L, 7L)
         );
 
+        verify(ticketRepository).existsById(10L);
         verify(ticketRepository, never()).findById(10L);
     }
 }

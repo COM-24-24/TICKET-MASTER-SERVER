@@ -1,5 +1,6 @@
 package com.ticketmaster.ticketmaster.order.service;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import com.ticketmaster.ticketmaster.events.entity.TicketType;
 import com.ticketmaster.ticketmaster.events.entity.TicketTypeRepository;
 import com.ticketmaster.ticketmaster.order.dto.OrderItemResponse;
@@ -60,7 +61,7 @@ public class OrderService {
         for (PlaceOrderRequest.ItemRequest itemReq : request.getItems()) {
             
             TicketType ticketType = ticketTypeRepository.findByIdForUpdate(itemReq.getTicketTypeId())
-                    .orElseThrow(() -> new IllegalArgumentException("Ticket type not found"));
+                    .orElseThrow(() -> new NotFoundException("Ticket type not found."));
 
             int available = ticketType.getTotalQuantity() - ticketType.getQuantitySold();
             if (available < itemReq.getQuantity()) {
@@ -124,7 +125,7 @@ public class OrderService {
     public OrderResponse getOrderById(Long orderId) {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+                .orElseThrow(() -> new NotFoundException("Order not found."));
 
         if (!order.getUser().getEmail().equals(email)) {
             throw new SecurityException("You are not authorized to view this order");
@@ -136,7 +137,7 @@ public class OrderService {
     @Transactional
     public void updateOrderStatus(Long orderId, Order.OrderStatus newStatus) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+                .orElseThrow(() -> new NotFoundException("Order not found."));
 
         if (order.getStatus() == newStatus) {
             return;
@@ -155,7 +156,7 @@ public class OrderService {
             
             for (OrderItem item : order.getItems()) {
                 TicketType ticketType = ticketTypeRepository.findByIdForUpdate(item.getTicketTypeId())
-                        .orElseThrow(() -> new IllegalArgumentException("Ticket type not found"));
+                        .orElseThrow(() -> new NotFoundException("Ticket type not found."));
                 
                 int newSold = ticketType.getQuantitySold() - item.getQuantity();
                 ticketType.setQuantitySold(Math.max(0, newSold));
@@ -170,7 +171,7 @@ public class OrderService {
     public OrderResponse cancelOrder(Long orderId) {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found"));
+                .orElseThrow(() -> new NotFoundException("Order not found."));
 
         if (!order.getUser().getEmail().equals(email)) {
             throw new SecurityException("You are not authorized to cancel this order");

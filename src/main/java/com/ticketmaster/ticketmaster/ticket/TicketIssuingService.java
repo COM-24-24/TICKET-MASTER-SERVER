@@ -1,5 +1,6 @@
 package com.ticketmaster.ticketmaster.ticket;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import com.ticketmaster.ticketmaster.events.entity.Event;
 import com.ticketmaster.ticketmaster.events.entity.EventRepository;
 import com.ticketmaster.ticketmaster.events.entity.TicketType;
@@ -61,7 +62,7 @@ public class TicketIssuingService {
 
         Event event = eventRepository.findById(order.getEventId())
                 .orElseThrow(() ->
-                        new IllegalArgumentException("Event not found."));
+                        new NotFoundException("Event not found."));
 
         List<Ticket> tickets = new ArrayList<>();
         LocalDateTime issuedAt = LocalDateTime.now();
@@ -79,7 +80,7 @@ public class TicketIssuingService {
             TicketType ticketType = ticketTypeRepository
                     .findByIdForUpdate(item.getTicketTypeId())
                     .orElseThrow(() ->
-                            new IllegalArgumentException(
+                            new NotFoundException(
                                     "Ticket type not found: "
                                             + item.getTicketTypeId()
                             ));

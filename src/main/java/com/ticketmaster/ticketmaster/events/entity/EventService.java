@@ -1,5 +1,6 @@
 package com.ticketmaster.ticketmaster.events.entity;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import com.ticketmaster.ticketmaster.events.EventCancelledEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -35,7 +36,7 @@ public class EventService {
 
     public Event getEventById(Long id) {
         return eventRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+                .orElseThrow(() -> new NotFoundException("Event not found."));
     }
 
     public Event editEvent(Long id, Event updatedEvent, String organizerUsername) {

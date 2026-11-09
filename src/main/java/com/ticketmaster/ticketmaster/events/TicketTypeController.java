@@ -1,5 +1,6 @@
 package com.ticketmaster.ticketmaster.events;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import com.ticketmaster.ticketmaster.events.entity.TicketType;
 import com.ticketmaster.ticketmaster.events.entity.TicketTypeRepository;
 import com.ticketmaster.ticketmaster.events.entity.TicketTypeService;
@@ -66,7 +67,7 @@ public class TicketTypeController {
 public ResponseEntity<TicketType> getOne(@PathVariable Long id) {
     return ticketTypeRepository.findById(id)
             .map(ResponseEntity::ok)
-            .orElse(ResponseEntity.notFound().build());
+            .orElseThrow(() -> new NotFoundException("Ticket type not found."));
 }
 
 

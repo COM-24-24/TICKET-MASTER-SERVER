@@ -1,5 +1,6 @@
 package com.ticketmaster.ticketmaster.events.entity;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,7 +22,7 @@ public class CapacityService {
                     "Quantity must be positive");
         }
         TicketType tt = ticketTypeRepository.findByIdForUpdate(ticketTypeId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                .orElseThrow(() -> new NotFoundException(
                         "Ticket type not found: " + ticketTypeId));
 
         int remaining = tt.getTotalQuantity() - tt.getQuantitySold();
@@ -38,7 +39,7 @@ public class CapacityService {
         if (quantity <= 0)
             return;
         TicketType tt = ticketTypeRepository.findByIdForUpdate(ticketTypeId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                .orElseThrow(() -> new NotFoundException(
                         "Ticket type not found: " + ticketTypeId));
         tt.setQuantitySold(Math.max(0, tt.getQuantitySold() - quantity));
         ticketTypeRepository.save(tt);

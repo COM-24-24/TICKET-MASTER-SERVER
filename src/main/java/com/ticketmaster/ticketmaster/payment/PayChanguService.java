@@ -3,6 +3,7 @@ package com.ticketmaster.ticketmaster.payment;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
@@ -54,15 +55,20 @@ public class PayChanguService {
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
+        ResponseEntity<Map> response;
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                    baseUrl + "/payment", request, Map.class);
-
-            Map<String, Object> data = (Map<String, Object>) response.getBody().get("data");
-            return (String) data.get("checkout_url");
-
-        } catch (Exception e) {
-            throw new RuntimeException("PayChangu checkout failed: " + e.getMessage());
+            response = restTemplate.postForEntity(baseUrl + "/payment", request, Map.class);
+        } catch (RestClientException exception) {
+            throw new PaymentGatewayException(exception);
         }
+
+        Map<?, ?> responseBody = response.getBody();
+        Object data = responseBody == null ? null : responseBody.get("data");
+        if (!(data instanceof Map<?, ?> dataMap)
+                || !(dataMap.get("checkout_url") instanceof String checkoutUrl)
+                || checkoutUrl.isBlank()) {
+            throw new PaymentGatewayException();
+        }
+        return checkoutUrl;
     }
 }

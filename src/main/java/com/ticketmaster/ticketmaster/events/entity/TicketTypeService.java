@@ -1,5 +1,6 @@
 package com.ticketmaster.ticketmaster.events.entity;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,8 +24,7 @@ public class TicketTypeService {
     public TicketType create(Long eventId, String name, BigDecimal price,
             Integer totalQuantity, String organizerUsername) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Event not found"));
+                .orElseThrow(() -> new NotFoundException("Event not found."));
         
         // TEMPORARY FIX: Disabling ownership check for demo
         /*
@@ -48,8 +48,7 @@ public class TicketTypeService {
     public TicketType update(Long id, BigDecimal price, Integer totalQuantity,
             String organizerUsername) {
         TicketType tt = ticketTypeRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Ticket type not found"));
+                .orElseThrow(() -> new NotFoundException("Ticket type not found."));
         
         // TEMPORARY FIX: Disabling ownership check for demo
         /*

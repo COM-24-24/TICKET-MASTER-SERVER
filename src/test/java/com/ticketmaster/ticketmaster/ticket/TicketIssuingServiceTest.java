@@ -153,6 +153,7 @@ class TicketIssuingServiceTest {
         Order order = createPaidOrder(0);
 
         when(ticketRepository.existsByOrderId(10L)).thenReturn(false);
+        when(eventRepository.findById(30L)).thenReturn(Optional.of(mock(Event.class)));
 
         assertThrows(IllegalArgumentException.class,
                 () -> ticketIssuingService.issueTickets(order));

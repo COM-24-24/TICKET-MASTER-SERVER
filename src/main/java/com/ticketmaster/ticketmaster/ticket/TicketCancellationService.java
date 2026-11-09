@@ -1,5 +1,6 @@
 package com.ticketmaster.ticketmaster.ticket;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,10 +20,13 @@ public class TicketCancellationService {
 
         Ticket ticket = ticketRepository
                 .findByIdAndOwnerIdForUpdate(ticketId, ownerId)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.FORBIDDEN,
-                        "Ticket not found or you do not have permission to cancel it."
-                ));
+                .orElseThrow(() -> {
+                    if (ticketRepository.existsById(ticketId)) {
+                        return new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                "Ticket not found or you do not have permission to cancel it.");
+                    }
+                    return new NotFoundException("Ticket not found.");
+                });
 
         if (ticket.getStatus() == TicketStatus.USED) {
             throw new ResponseStatusException(

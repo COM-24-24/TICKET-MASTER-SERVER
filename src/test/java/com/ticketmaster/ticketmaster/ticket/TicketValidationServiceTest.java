@@ -1,5 +1,6 @@
 package com.ticketmaster.ticketmaster.ticket;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import com.ticketmaster.ticketmaster.events.entity.Event;
 import com.ticketmaster.ticketmaster.ticket.dto.TicketValidationResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,7 +60,7 @@ class TicketValidationServiceTest {
         when(ticketRepository.findByTicketCodeForUpdate("UNKNOWN"))
                 .thenReturn(Optional.empty());
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(NotFoundException.class,
                 () -> service.validateTicket("UNKNOWN"));
     }
 

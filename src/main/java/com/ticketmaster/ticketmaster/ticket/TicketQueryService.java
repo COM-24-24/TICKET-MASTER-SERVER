@@ -1,6 +1,7 @@
 
 package com.ticketmaster.ticketmaster.ticket;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import com.ticketmaster.ticketmaster.ticket.dto.TicketResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -30,9 +31,12 @@ public class TicketQueryService {
     public TicketResponse getMyTicketById(Long ticketId, Long ownerId) {
         return ticketRepository.findByIdAndOwnerId(ticketId, ownerId)
                 .map(TicketResponse::from)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.FORBIDDEN,
-                        "Ticket not found or you do not have permission to view it."
-                ));
+                .orElseThrow(() -> {
+                    if (ticketRepository.existsById(ticketId)) {
+                        return new ResponseStatusException(HttpStatus.FORBIDDEN,
+                                "Ticket not found or you do not have permission to view it.");
+                    }
+                    return new NotFoundException("Ticket not found.");
+                });
     }
 }

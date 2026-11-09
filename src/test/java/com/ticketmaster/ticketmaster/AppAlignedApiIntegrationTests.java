@@ -339,6 +339,29 @@ class AppAlignedApiIntegrationTests {
     }
 
     @Test
+    void checkoutGatewayFailureReturns502AndKeepsThePendingAttempt() throws Exception {
+        JsonNode customer = register("gateway-error-owner@example.test", "Gateway Error");
+        User owner = userRepository.findByEmail("gateway-error-owner@example.test").orElseThrow();
+        Event event = saveEvent(owner, "Gateway Error Event", "Music", "Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 3);
+        TicketType type = saveTicketType(event, "Standard", "100.00", 2, 0);
+        JsonNode order = createOrder(bearer(customer), event.getId(), type.getId(), 1);
+        Long orderId = order.path("id").asLong();
+        when(payChanguService.initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
+                .thenThrow(new com.ticketmaster.ticketmaster.payment.PaymentGatewayException());
+
+        mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", orderId))))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.message").value("Payment service unavailable."));
+        assertEquals(PaymentStatus.PENDING,
+                paymentRepository.findByOrderIdOrderByCreatedAtDesc(orderId).get(0).getStatus());
+    }
+
+    @Test
     void orderRejectsForeignTicketTypesAndExcessQuantityAndProtectsOwnership() throws Exception {
         JsonNode ownerAuth = register("order-owner@example.test", "Order Owner");
         JsonNode otherAuth = register("order-other@example.test", "Order Other");

@@ -46,7 +46,7 @@ public class PaymentProcessingService {
         this.payChanguService = payChanguService;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = PaymentGatewayException.class)
     public CheckoutResult checkout(Long orderId) {
         OrderResponse order = orderService.getOrderById(orderId);
         if (!"PENDING".equals(order.getStatus())) {

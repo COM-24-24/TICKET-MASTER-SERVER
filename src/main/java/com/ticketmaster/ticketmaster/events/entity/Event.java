@@ -22,6 +22,9 @@ public class Event {
     @Column(nullable = false, length = 200)
     private String title;
 
+    @Column(length = 100)
+    private String category = "Other";
+
     @Column(nullable = false, length = 200)
     private String venue;
 
@@ -45,6 +48,9 @@ public class Event {
     // Used by the existing event ownership checks
     @Column(name = "organizer_username", nullable = false, length = 100)
     private String organizerUsername;
+
+    @Column(name = "cover_image_path", length = 500)
+    private String coverImagePath;
 
     public Event() {
     }
@@ -86,6 +92,14 @@ public class Event {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public String getVenue() {
@@ -143,5 +157,13 @@ public class Event {
 
     public void setOrganizerUsername(String organizerUsername) {
         this.organizerUsername = organizerUsername;
+    }
+
+    public String getCoverImagePath() {
+        return coverImagePath;
+    }
+
+    public void setCoverImagePath(String coverImagePath) {
+        this.coverImagePath = coverImagePath;
     }
 }

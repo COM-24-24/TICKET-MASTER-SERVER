@@ -1,6 +1,7 @@
 
 package com.ticketmaster.ticketmaster.events;
 
+import com.ticketmaster.ticketmaster.events.dto.EventResponse;
 import com.ticketmaster.ticketmaster.events.entity.Event;
 import com.ticketmaster.ticketmaster.events.entity.EventService;
 
@@ -34,14 +35,17 @@ public class EventController {
 
     // Get all events
     @GetMapping
-    public List<Event> getAllEvents() {
-        return eventService.getAllEvents();
+    public List<EventResponse> getAllEvents(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search) {
+        return eventService.getAllEvents(category, search);
     }
 
     // Get one event
     @GetMapping("/{id}")
-    public Event getEventById(@PathVariable Long id) {
-        return eventService.getEventById(id);
+    public EventResponse getEventById(@PathVariable Long id, Authentication authentication) {
+        String requesterEmail = authentication == null ? null : authentication.getName();
+        return eventService.getEventResponseById(id, requesterEmail);
     }
 
     // Edit an event

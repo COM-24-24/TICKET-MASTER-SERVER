@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findByOrganizerUsername(String organizerUsername);
+    List<Event> findByStatusInOrderByStartTimeAsc(List<EventStatus> statuses);
 }

@@ -225,11 +225,9 @@ class AppAlignedApiIntegrationTests {
         assertAnonymousUnauthorized(post("/api/payments/verify"), "/api/payments/verify");
         assertAnonymousUnauthorized(get("/api/organizer/events"), "/api/organizer/events");
 
-        mockMvc.perform(post("/api/orders/123/status")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"PAID\"}"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.path").value("/api/orders/123/status"));
+        assertAnonymousUnauthorized(post("/api/orders/123/status")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"PAID\"}"), "/api/orders/123/status");
     }
 
     @Test

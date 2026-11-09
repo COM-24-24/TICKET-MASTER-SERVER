@@ -3,9 +3,10 @@ package com.ticketmaster.ticketmaster.service;
 import com.ticketmaster.ticketmaster.dto.CreatePaymentRequest;
 import com.ticketmaster.ticketmaster.entity.Payment;
 import com.ticketmaster.ticketmaster.entity.PaymentStatus;
+import com.ticketmaster.ticketmaster.order.entity.Order;
+import com.ticketmaster.ticketmaster.order.service.OrderService;
 import com.ticketmaster.ticketmaster.repository.PaymentRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -13,11 +14,11 @@ import java.util.Optional;
 @Service
 public class PaymentService {
     private final PaymentRepository paymentRepository;
-    private final OrderStatusClient orderStatusClient;
+    private final OrderService orderService;
 
-    public PaymentService(PaymentRepository paymentRepository, OrderStatusClient orderStatusClient) {
+    public PaymentService(PaymentRepository paymentRepository, OrderService orderService) {
         this.paymentRepository = paymentRepository;
-        this.orderStatusClient = orderStatusClient;
+        this.orderService = orderService;
     }
 
     public Payment createPayment(CreatePaymentRequest request) {
@@ -28,12 +29,12 @@ public class PaymentService {
         payment.setCreatedAt(LocalDateTime.now());
         payment = paymentRepository.save(payment);
 
-        try {
-            orderStatusClient.updateOrderStatus(payment.getOrderId(), payment.getStatus());
+        if (payment.getStatus() == PaymentStatus.PAID) {
+            orderService.markOrderPaid(payment.getOrderId(), "legacy-payment-simulation");
             payment.setOrderStatusUpdated(true);
-        } catch (RestClientException exception) {
-            payment.setOrderStatusUpdated(false);
-            payment.setOrderStatusUpdateError(exception.getMessage());
+        } else {
+            orderService.updateOrderStatus(payment.getOrderId(), Order.OrderStatus.FAILED);
+            payment.setOrderStatusUpdated(true);
         }
         return paymentRepository.save(payment);
     }

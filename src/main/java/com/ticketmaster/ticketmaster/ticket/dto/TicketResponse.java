@@ -23,7 +23,14 @@ public record TicketResponse(
         BigDecimal ticketPrice,
         TicketStatus status,
         LocalDateTime issuedAt,
-        LocalDateTime usedAt
+        LocalDateTime usedAt,
+        String qrContent,
+        String buyerName,
+        String buyerEmail,
+        String paymentReference,
+        String currency,
+        LocalDateTime purchasedAt,
+        String coverImagePath
 ) {
 
     public static TicketResponse from(Ticket ticket) {
@@ -47,7 +54,14 @@ public record TicketResponse(
 
                 ticket.getStatus(),
                 ticket.getIssuedAt(),
-                ticket.getUsedAt()
+                ticket.getUsedAt(),
+                ticket.getTicketCode(),
+                null,
+                null,
+                null,
+                "MWK",
+                ticket.getIssuedAt(),
+                ticket.getEvent().getCoverImagePath()
         );
     }
 }

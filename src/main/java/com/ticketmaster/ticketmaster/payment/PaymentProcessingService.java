@@ -8,7 +8,7 @@ import com.ticketmaster.ticketmaster.entity.PaymentStatus;
 import com.ticketmaster.ticketmaster.order.dto.OrderResponse;
 import com.ticketmaster.ticketmaster.order.service.OrderService;
 import com.ticketmaster.ticketmaster.repository.PaymentRepository;
-import com.ticketmaster.ticketmaster.ticket.TicketRepository;
+import com.ticketmaster.ticketmaster.ticket.TicketQueryService;
 import com.ticketmaster.ticketmaster.ticket.dto.TicketResponse;
 import com.ticketmaster.ticketmaster.user.entity.User;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
@@ -28,7 +28,7 @@ public class PaymentProcessingService {
     private final UserRepository userRepository;
     private final CustomerProfileRepository customerProfileRepository;
     private final OrderService orderService;
-    private final TicketRepository ticketRepository;
+    private final TicketQueryService ticketQueryService;
     private final PayChanguService payChanguService;
 
     public PaymentProcessingService(
@@ -36,13 +36,13 @@ public class PaymentProcessingService {
             UserRepository userRepository,
             CustomerProfileRepository customerProfileRepository,
             OrderService orderService,
-            TicketRepository ticketRepository,
+            TicketQueryService ticketQueryService,
             PayChanguService payChanguService) {
         this.paymentRepository = paymentRepository;
         this.userRepository = userRepository;
         this.customerProfileRepository = customerProfileRepository;
         this.orderService = orderService;
-        this.ticketRepository = ticketRepository;
+        this.ticketQueryService = ticketQueryService;
         this.payChanguService = payChanguService;
     }
 
@@ -166,10 +166,11 @@ public class PaymentProcessingService {
     }
 
     private PaidOrderResult paidOrder(OrderResponse order, String paymentStatus) {
-        List<TicketResponse> tickets = ticketRepository.findAllByOrderId(order.getId())
-                .stream()
-                .map(TicketResponse::from)
-                .toList();
+        Long ownerId = userRepository.findByEmail(
+                        SecurityContextHolder.getContext().getAuthentication().getName())
+                .orElseThrow(() -> new NotFoundException("User not found."))
+                .getId();
+        List<TicketResponse> tickets = ticketQueryService.getOrderTickets(order.getId(), ownerId);
         return new PaidOrderResult(order, tickets, paymentStatus);
     }
 

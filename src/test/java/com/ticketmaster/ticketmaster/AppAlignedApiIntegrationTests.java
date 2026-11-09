@@ -288,7 +288,19 @@ class AppAlignedApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.order.status").value("PAID"))
                 .andExpect(jsonPath("$.paymentStatus").value("PAID"))
-                .andExpect(jsonPath("$.tickets.length()").value(2));
+                .andExpect(jsonPath("$.tickets.length()").value(2))
+                .andExpect(jsonPath("$.tickets[0].qrContent")
+                        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.emptyOrNullString())))
+                .andExpect(jsonPath("$.tickets[0].buyerName").value("Payment Owner"))
+                .andExpect(jsonPath("$.tickets[0].buyerEmail").value("payment-owner@example.test"))
+                .andExpect(jsonPath("$.tickets[0].paymentReference").value(txRef))
+                .andExpect(jsonPath("$.tickets[0].currency").value("MWK"));
+
+        mockMvc.perform(get("/api/orders/{id}/tickets", orderId)
+                        .header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].purchasedAt").exists());
 
         mockMvc.perform(post("/api/payments/verify")
                         .header("Authorization", authorization)

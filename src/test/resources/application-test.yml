@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:ticketmaster;MODE=MariaDB;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: test-database-password
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+jwt:
+  secret: test-only-jwt-secret-key-with-at-least-32-characters
+
+google:
+  client-id: test-only-google-client-id
+  client-secret: test-only-google-client-secret
+
+paychangu:
+  secret-key: test-only-paychangu-secret
+  base-url: http://localhost
+  callback-url: http://localhost/api/payments/callback
+  return-url: http://localhost/api/payments/return

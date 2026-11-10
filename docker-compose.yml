@@ -32,7 +32,8 @@ services:
     env_file: .env
     environment:
       SPRING_PROFILES_ACTIVE: dev
-      APP_DEMO_PAYMENT_ENABLED: ${APP_DEMO_PAYMENT_ENABLED:-true}
+      APP_DEMO_PAYMENT_ENABLED: ${APP_DEMO_PAYMENT_ENABLED:-false}
+      APP_DEMO_PAYMENT_BASE_URL: ${APP_DEMO_PAYMENT_BASE_URL:-http://localhost:8080}
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
@@ -45,10 +46,13 @@ services:
       PAYCHANGU_CALLBACK_URL: ${PAYCHANGU_CALLBACK_URL}
       PAYCHANGU_RETURN_URL: ${PAYCHANGU_RETURN_URL}
       PAYCHANGU_WEBHOOK_SECRET: ${PAYCHANGU_WEBHOOK_SECRET:-}
+      APP_UPLOADS_DIR: /app/uploads
     volumes:
       - ticketmaster_uploads:/app/uploads
+      - ./uploads:/app/uploads
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health || exit 1"]
+      test:
+        ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

@@ -59,6 +59,7 @@ app:
     allow-privileged-roles: false
   demo-payment:
     enabled: false
+    base-url: ${APP_DEMO_PAYMENT_BASE_URL:http://localhost:8080}
   orders:
     max-tickets-per-order: 10
     pending-minutes: 30

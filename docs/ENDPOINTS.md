@@ -43,6 +43,8 @@ Send authenticated requests with `Authorization: Bearer <token>`. JSON request a
 | `GET /api/payments/return?tx_ref={txRef}&status={ignored}` | Public gateway return | Ignore gateway-supplied status, verify, then redirect |
 | `POST /api/payments/webhook` | Public, signature-verified gateway notification | Verify the raw-body `Signature` HMAC and re-query PayChangu |
 | `POST /api/dev/orders/{orderId}/mark-paid` | CUSTOMER order owner; only `dev` with demo enabled | Simulate a paid order |
+| `GET /api/dev/payments/checkout/{txRef}` | Public; only `dev` with demo enabled | Open the local fake PayChangu hosted checkout |
+| `POST /api/dev/payments/return?tx_ref={txRef}` | Public; only `dev` with demo enabled | Simulate success, issue tickets and redirect to the app |
 | `GET /api/tickets/my` | Authenticated owner | List own tickets |
 | `GET /api/tickets/{id}` | Authenticated owner | Read a ticket |
 | `POST /api/tickets/{id}/cancel` | Authenticated owner | Cancel an unused ticket |
@@ -51,7 +53,7 @@ Send authenticated requests with `Authorization: Bearer <token>`. JSON request a
 | `GET /api/auth/qr/{text}` | Public | Render QR content as PNG |
 | `GET /uploads/**` | Public | Serve uploaded event covers |
 
-`POST /api/orders/{id}/status` is not available. Order payment state is changed only by the verified payment flow or the development-only demo endpoint.
+`POST /api/orders/{id}/status` is not available. Order payment state is changed only by the verified payment flow or the development-only demo flow.
 
 ## Example requests and responses
 
@@ -159,6 +161,10 @@ Only PUBLISHED, not-ended events are orderable. The event must match every reque
   "orderId": 501
 }
 ```
+
+With the `dev` profile, hosted PayChangu checkout is the default. Use a PayChangu test API key for student testing; PayChangu test mode simulates payments without affecting live data. The backend only returns HTTPS checkout links hosted on a PayChangu domain. If `APP_DEMO_PAYMENT_ENABLED=true`, checkout instead creates a `DEMO` attempt and returns the local simulator URL. The simulator charges no money; selecting **Simulate successful payment** calls the fake return route, marks the payment paid, and redirects to the app deep link. The app then calls `POST /api/payments/verify` with the original `orderId` to retrieve issued ticket details. The direct `/api/dev/orders/{orderId}/mark-paid` endpoint remains available for API-only demos.
+
+For a phone or emulator, configure `APP_DEMO_PAYMENT_BASE_URL` to the backend address reachable from that device. The default `http://localhost:8080` is suitable for a browser on the same computer.
 
 Successful response:
 

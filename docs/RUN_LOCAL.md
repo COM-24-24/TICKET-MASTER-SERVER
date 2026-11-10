@@ -40,15 +40,19 @@ ORDER BY tt.event_id, tt.price, tt.id;
 
 ## Demo payments
 
-Demo payments are enabled by default for the Docker Compose `dev` profile. To disable them, set `APP_DEMO_PAYMENT_ENABLED=false` in `.env` and recreate the backend:
+The Docker Compose `dev` profile uses PayChangu's hosted checkout by default. For student testing, put a **PayChangu test API key** in `.env`; the key determines whether PayChangu creates a sandbox or live checkout. Test credentials and test payment methods simulate transactions without changing live data. Never put a live API key in a student/testing environment. The backend now rejects a checkout URL unless it uses HTTPS and a PayChangu domain.
+
+For local development, PayChangu's callback and return URLs must be reachable from the provider and the student's device. Use a public HTTPS tunnel and set `PAYCHANGU_CALLBACK_URL` and `PAYCHANGU_RETURN_URL` to its `/api/payments/callback` and `/api/payments/return` routes.
+
+The local fake checkout remains available by setting `APP_DEMO_PAYMENT_ENABLED=true`. It does not contact PayChangu or charge money; it returns a local HTTP simulator page where the student selects **Simulate successful payment**. For a phone or emulator, set `APP_DEMO_PAYMENT_BASE_URL` to the backend address reachable from that device. Use this option only with a debug app build that allows local HTTP, or expose the simulator through HTTPS. The app should then call `/api/payments/verify` with the order ID to receive ticket details for the QR screen.
 
 ```sh
 docker compose up --build --force-recreate backend
 ```
 
-To re-enable demo payments, set `APP_DEMO_PAYMENT_ENABLED=true` or remove that override and recreate the backend. The demo endpoint is not registered outside the `dev` profile, regardless of this setting.
+To use PayChangu test mode again, set `APP_DEMO_PAYMENT_ENABLED=false` and configure a PayChangu test API key. The fake hosted checkout and return routes are not registered outside the `dev` profile, regardless of this setting.
 
-The application still requires valid PayChangu credentials for real checkouts; the demo endpoint does not require gateway calls. Configure the sandbox secret key and public callback/return URLs as `PAYCHANGU_SECRET_KEY`, `PAYCHANGU_CALLBACK_URL`, and `PAYCHANGU_RETURN_URL`. `PAYCHANGU_BASE_URL` defaults to `https://api.paychangu.com`; a test API key selects PayChangu's test mode. If webhooks are enabled in the PayChangu dashboard, set `PAYCHANGU_WEBHOOK_SECRET` to the dashboard's webhook secret and configure `POST /api/payments/webhook`; webhooks are rejected while the secret is unset.
+The application requires PayChangu credentials for hosted checkouts. Configure the test API key and public callback/return URLs as `PAYCHANGU_SECRET_KEY`, `PAYCHANGU_CALLBACK_URL`, and `PAYCHANGU_RETURN_URL`. `PAYCHANGU_BASE_URL` defaults to `https://api.paychangu.com`; a test API key selects PayChangu's test mode. If webhooks are enabled in the PayChangu dashboard, set `PAYCHANGU_WEBHOOK_SECRET` to the dashboard's webhook secret and configure `POST /api/payments/webhook`; webhooks are rejected while the secret is unset.
 
 ## Run tests locally
 

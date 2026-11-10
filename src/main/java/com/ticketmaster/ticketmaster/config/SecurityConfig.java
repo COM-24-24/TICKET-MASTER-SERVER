@@ -70,6 +70,8 @@ public class SecurityConfig {
                         "/api/payments/webhook").permitAll()
                 .requestMatchers("/api/payments/checkout", "/api/payments/verify")
                         .hasRole("CUSTOMER")
+                .requestMatchers(HttpMethod.GET, "/api/dev/payments/checkout/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/dev/payments/return").permitAll()
                 .requestMatchers("/api/dev/**").hasRole("CUSTOMER")
                 .requestMatchers("/api/tickets/validate").hasRole("VALIDATOR")
                 .requestMatchers("/api/customers/**", "/api/tickets/**").authenticated()

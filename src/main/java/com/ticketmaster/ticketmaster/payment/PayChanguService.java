@@ -17,8 +17,10 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Locale;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -95,7 +97,7 @@ public class PayChanguService {
                 || checkoutUrl.isBlank()) {
             throw new PaymentGatewayException();
         }
-        return checkoutUrl;
+        return requirePayChanguCheckoutUrl(checkoutUrl);
     }
 
     public Verification verify(String txRef) {
@@ -161,6 +163,24 @@ public class PayChanguService {
             throw new IllegalArgumentException("Missing gateway field: " + name);
         }
         return value.toString();
+    }
+
+    private String requirePayChanguCheckoutUrl(String checkoutUrl) {
+        try {
+            URI uri = URI.create(checkoutUrl);
+            String host = uri.getHost();
+            String normalizedHost = host == null ? "" : host.toLowerCase(Locale.ROOT);
+            boolean isPayChanguHost = normalizedHost.equals("paychangu.com")
+                    || normalizedHost.endsWith(".paychangu.com");
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || !isPayChanguHost
+                    || uri.getUserInfo() != null || (uri.getPort() != -1 && uri.getPort() != 443)) {
+                throw new PaymentGatewayException(
+                        new IllegalArgumentException("PayChangu returned a non-secure checkout URL."));
+            }
+            return uri.toASCIIString();
+        } catch (IllegalArgumentException exception) {
+            throw new PaymentGatewayException(exception);
+        }
     }
 
     public record Verification(String txRef, String status, String currency, BigDecimal amount) {

@@ -13,8 +13,11 @@ import com.ticketmaster.ticketmaster.ticket.dto.TicketResponse;
 import com.ticketmaster.ticketmaster.user.entity.User;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -30,6 +33,9 @@ public class PaymentProcessingService {
     private final OrderService orderService;
     private final TicketQueryService ticketQueryService;
     private final PayChanguService payChanguService;
+    private final Environment environment;
+    private final boolean demoPaymentEnabled;
+    private final String demoPaymentBaseUrl;
 
     public PaymentProcessingService(
             PaymentRepository paymentRepository,
@@ -37,13 +43,19 @@ public class PaymentProcessingService {
             CustomerProfileRepository customerProfileRepository,
             OrderService orderService,
             TicketQueryService ticketQueryService,
-            PayChanguService payChanguService) {
+            PayChanguService payChanguService,
+            Environment environment,
+            @Value("${app.demo-payment.enabled:false}") boolean demoPaymentEnabled,
+            @Value("${app.demo-payment.base-url:http://localhost:8080}") String demoPaymentBaseUrl) {
         this.paymentRepository = paymentRepository;
         this.userRepository = userRepository;
         this.customerProfileRepository = customerProfileRepository;
         this.orderService = orderService;
         this.ticketQueryService = ticketQueryService;
         this.payChanguService = payChanguService;
+        this.environment = environment;
+        this.demoPaymentEnabled = demoPaymentEnabled;
+        this.demoPaymentBaseUrl = demoPaymentBaseUrl;
     }
 
     @Transactional(noRollbackFor = PaymentGatewayException.class)
@@ -52,8 +64,10 @@ public class PaymentProcessingService {
         if (!"PENDING".equals(order.getStatus())) {
             throw new IllegalStateException("Only PENDING orders can be checked out.");
         }
+        boolean demoMode = isDemoMode();
         boolean activeAttempt = paymentRepository.findByOrderIdOrderByCreatedAtDesc(orderId).stream()
-                .anyMatch(payment -> payment.getProvider() == PaymentProvider.PAYCHANGU
+                .anyMatch(payment -> (payment.getProvider() == PaymentProvider.PAYCHANGU
+                        || (demoMode && payment.getProvider() == PaymentProvider.DEMO))
                         && payment.getStatus() == PaymentStatus.PENDING);
         if (activeAttempt) {
             throw new IllegalStateException(
@@ -63,13 +77,28 @@ public class PaymentProcessingService {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new NotFoundException("User not found."));
+
+        String txRef = UUID.randomUUID().toString();
+        if (demoMode) {
+            Payment payment = new Payment();
+            payment.setOrderId(orderId);
+            payment.setAmount(order.getTotalAmount().doubleValue());
+            payment.setTxRef(txRef);
+            payment.setProvider(PaymentProvider.DEMO);
+            payment.setStatus(PaymentStatus.PENDING);
+            payment.setCreatedAt(LocalDateTime.now());
+            paymentRepository.save(payment);
+            String baseUrl = demoPaymentBaseUrl.replaceAll("/+$", "");
+            return new CheckoutResult(order.getTotalAmount(), txRef,
+                    baseUrl + "/api/dev/payments/checkout/" + txRef);
+        }
+
         String fullName = customerProfileRepository.findByUserId(user.getId())
                 .map(profile -> profile.getFullName())
                 .filter(name -> name != null && !name.isBlank())
                 .orElse("Customer");
         String[] names = splitName(fullName);
 
-        String txRef = UUID.randomUUID().toString();
         Payment payment = new Payment();
         payment.setOrderId(orderId);
         payment.setAmount(order.getTotalAmount().doubleValue());
@@ -181,6 +210,45 @@ public class PaymentProcessingService {
         return paidOrder(orderService.getOrderById(orderId), "PAID");
     }
 
+    @Transactional(readOnly = true)
+    public DemoCheckout getDemoCheckout(String txRef) {
+        if (!isDemoMode()) {
+            throw new NotFoundException("Demo payment not found.");
+        }
+        Payment payment = paymentRepository.findByTxRef(txRef)
+                .filter(value -> value.getProvider() == PaymentProvider.DEMO)
+                .orElseThrow(() -> new NotFoundException("Demo payment not found."));
+        if (payment.getStatus() != PaymentStatus.PENDING
+                && payment.getStatus() != PaymentStatus.PAID) {
+            throw new IllegalStateException("This demo payment is no longer pending.");
+        }
+        return new DemoCheckout(payment.getTxRef(), BigDecimal.valueOf(payment.getAmount()),
+                payment.getStatus().name());
+    }
+
+    @Transactional
+    public void completeDemoPayment(String txRef) {
+        if (!isDemoMode()) {
+            throw new NotFoundException("Demo payment not found.");
+        }
+        Payment payment = paymentRepository.findByTxRefForUpdate(txRef)
+                .filter(value -> value.getProvider() == PaymentProvider.DEMO)
+                .orElseThrow(() -> new NotFoundException("Demo payment not found."));
+        if (payment.getStatus() == PaymentStatus.PAID) {
+            return;
+        }
+        if (payment.getStatus() != PaymentStatus.PENDING) {
+            throw new IllegalStateException("This demo payment is no longer pending.");
+        }
+        payment.setStatus(PaymentStatus.PAID);
+        paymentRepository.save(payment);
+        orderService.markOrderPaid(payment.getOrderId(), "DEMO:" + payment.getTxRef());
+    }
+
+    private boolean isDemoMode() {
+        return demoPaymentEnabled && environment.acceptsProfiles(Profiles.of("dev"));
+    }
+
     private PaidOrderResult paidOrder(OrderResponse order, String paymentStatus) {
         Long ownerId = userRepository.findByEmail(
                         SecurityContextHolder.getContext().getAuthentication().getName())
@@ -199,5 +267,8 @@ public class PaymentProcessingService {
     }
 
     public record PaidOrderResult(OrderResponse order, List<TicketResponse> tickets, String paymentStatus) {
+    }
+
+    public record DemoCheckout(String txRef, BigDecimal amount, String status) {
     }
 }

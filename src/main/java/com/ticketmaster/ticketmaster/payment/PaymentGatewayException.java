@@ -13,7 +13,8 @@ public class PaymentGatewayException extends RuntimeException {
     }
 
     public boolean isDefinitiveRejection() {
-        return getCause() instanceof HttpStatusCodeException exception
-                && exception.getStatusCode().is4xxClientError();
+        return getCause() instanceof IllegalArgumentException
+                || (getCause() instanceof HttpStatusCodeException exception
+                        && exception.getStatusCode().is4xxClientError());
     }
 }

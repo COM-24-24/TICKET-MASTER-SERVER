@@ -10,6 +10,7 @@ public record EventResponse(
         Long id,
         String title,
         String category,
+        String genre,
         String venue,
         String location,
         LocalDateTime startTime,

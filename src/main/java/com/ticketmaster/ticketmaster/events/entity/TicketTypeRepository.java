@@ -6,10 +6,15 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 public interface TicketTypeRepository extends JpaRepository<TicketType, Long> {
+
+    List<TicketType> findByEventIdOrderByPriceAsc(Long eventId);
+
+    List<TicketType> findByEventIdInOrderByPriceAsc(Collection<Long> eventIds);
 
     List<TicketType> findByEventId(Long eventId);
 

@@ -74,6 +74,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/tickets/validate").hasRole("VALIDATOR")
                 .requestMatchers("/api/customers/**", "/api/tickets/**").authenticated()
                 .requestMatchers("/api/orders/**").hasRole("CUSTOMER")
+                .requestMatchers(HttpMethod.DELETE, "/api/ticket-types/**").hasRole("ORGANIZER")
                 .requestMatchers("/api/organizer/**").hasRole("ORGANIZER")
                 .anyRequest().authenticated()
             )

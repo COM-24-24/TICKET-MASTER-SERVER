@@ -25,6 +25,9 @@ public class Event {
     @Column(length = 100)
     private String category = "Other";
 
+    @Column(length = 80)
+    private String genre;
+
     @Column(nullable = false, length = 200)
     private String venue;
 
@@ -59,8 +62,18 @@ public class Event {
     @PrePersist
     @PreUpdate
     public void validateAndSynchronizeTimes() {
-        if (startTime != null) {
+        if (startTime == null) {
+            startTime = dateTime;
+        }
+        if (dateTime == null) {
             dateTime = startTime;
+        }
+        if (startTime != null) {
+            startTime = startTime.withNano(0);
+            dateTime = startTime;
+        }
+        if (endTime != null) {
+            endTime = endTime.withNano(0);
         }
 
         if (startTime == null || endTime == null) {
@@ -99,7 +112,15 @@ public class Event {
     }
 
     public void setCategory(String category) {
-        this.category = category;
+        this.category = category == null || category.isBlank() ? "Other" : category;
+    }
+
+    public String getGenre() {
+        return genre;
+    }
+
+    public void setGenre(String genre) {
+        this.genre = genre;
     }
 
     public String getVenue() {

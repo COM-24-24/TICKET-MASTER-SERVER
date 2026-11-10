@@ -15,7 +15,10 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class EventService {
@@ -51,14 +54,17 @@ public class EventService {
     public List<EventResponse> getAllEvents(String category, String search) {
         String normalizedCategory = normalize(category);
         String normalizedSearch = normalize(search);
-        return eventRepository.findByStatusInOrderByStartTimeAsc(
+        List<Event> events = eventRepository.findByStatusInOrderByStartTimeAsc(
                         List.of(EventStatus.PUBLISHED, EventStatus.CANCELLED))
                 .stream()
                 .filter(event -> normalizedCategory == null
                         || Objects.equals(normalize(event.getCategory() == null
                                 ? "Other" : event.getCategory()), normalizedCategory))
                 .filter(event -> normalizedSearch == null || matchesSearch(event, normalizedSearch))
-                .map(this::toResponse)
+                .toList();
+        Map<Long, List<TicketType>> typesByEventId = ticketTypesFor(events);
+        return events.stream()
+                .map(event -> toResponse(event, typesByEventId.getOrDefault(event.getId(), List.of())))
                 .toList();
     }
 
@@ -68,7 +74,8 @@ public class EventService {
         if (event.getStatus() == EventStatus.DRAFT && !isOwner(event, requesterEmail)) {
             throw new NotFoundException("Event not found.");
         }
-        return toResponse(event);
+        List<TicketType> ticketTypes = ticketTypeRepository.findByEventIdOrderByPriceAsc(id);
+        return toResponse(event, ticketTypes);
     }
 
     public Event editEvent(Long id, Event updatedEvent, String organizerUsername) {
@@ -77,9 +84,28 @@ public class EventService {
         if (existingEvent.getStatus() != EventStatus.DRAFT) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only draft events can be edited");
         }
+        if (updatedEvent.getStartTime() == null && updatedEvent.getDateTime() == null) {
+            updatedEvent.setStartTime(existingEvent.getStartTime());
+        }
+        if (updatedEvent.getGenre() == null) {
+            updatedEvent.setGenre(existingEvent.getGenre());
+        }
+        if (updatedEvent.getCategory() == null || updatedEvent.getCategory().isBlank()) {
+            updatedEvent.setCategory(existingEvent.getCategory());
+        }
+        if (updatedEvent.getVenue() == null) {
+            updatedEvent.setVenue(existingEvent.getVenue());
+        }
+        if (updatedEvent.getLocation() == null) {
+            updatedEvent.setLocation(existingEvent.getLocation());
+        }
+        if (updatedEvent.getEndTime() == null) {
+            updatedEvent.setEndTime(existingEvent.getEndTime());
+        }
         validateEventTimes(updatedEvent);
         existingEvent.setTitle(updatedEvent.getTitle());
         existingEvent.setCategory(updatedEvent.getCategory());
+        existingEvent.setGenre(updatedEvent.getGenre());
         existingEvent.setVenue(updatedEvent.getVenue());
         existingEvent.setLocation(updatedEvent.getLocation());
         existingEvent.setDateTime(updatedEvent.getDateTime());
@@ -91,8 +117,15 @@ public class EventService {
     public Event publishEvent(Long id, String organizerUsername) {
         Event event = getEvent(id);
         checkOrganizer(event, organizerUsername);
+        if (event.getStatus() == EventStatus.CANCELLED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Cancelled events cannot be published.");
+        }
         if (event.getStatus() != EventStatus.DRAFT) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only draft events can be published");
+        }
+        if (ticketTypeRepository.findByEventId(event.getId()).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Add at least one ticket type before publishing.");
         }
         validateEventTimes(event);
         event.setStatus(EventStatus.PUBLISHED);
@@ -126,15 +159,33 @@ public class EventService {
         if (requesterEmail.equals(event.getOrganizerUsername())) {
             return true;
         }
-        return event.getOrganizerId() != null
+        return event.getOrganizerId() == null
+                && userRepository.findByEmail(requesterEmail)
+                        .map(User::getEmail)
+                        .filter(event.getOrganizerUsername()::equals)
+                        .isPresent()
+                || (event.getOrganizerId() != null
                 && userRepository.findByEmail(requesterEmail)
                         .map(User::getId)
                         .filter(event.getOrganizerId()::equals)
-                        .isPresent();
+                        .isPresent());
     }
 
-    private EventResponse toResponse(Event event) {
-        List<TicketType> ticketTypes = ticketTypeRepository.findByEventId(event.getId());
+    private Map<Long, List<TicketType>> ticketTypesFor(List<Event> events) {
+        if (events.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> eventIds = events.stream().map(Event::getId).toList();
+        return ticketTypeRepository.findByEventIdInOrderByPriceAsc(eventIds).stream()
+                .collect(Collectors.groupingBy(
+                        type -> type.getEvent().getId(),
+                        java.util.LinkedHashMap::new,
+                        Collectors.toList()));
+    }
+
+    private EventResponse toResponse(Event event, List<TicketType> ticketTypes) {
+        LocalDateTime startTime = event.getStartTime() != null
+                ? event.getStartTime() : event.getDateTime();
         long capacity = ticketTypes.stream()
                 .mapToLong(type -> type.getTotalQuantity() == null ? 0 : type.getTotalQuantity())
                 .sum();
@@ -145,18 +196,19 @@ public class EventService {
                 .map(TicketType::getPrice)
                 .filter(Objects::nonNull)
                 .min(java.math.BigDecimal::compareTo)
-                .orElse(null);
+                .orElse(java.math.BigDecimal.ZERO);
 
         return new EventResponse(
                 event.getId(),
                 event.getTitle(),
                 event.getCategory() == null ? "Other" : event.getCategory(),
+                event.getGenre(),
                 event.getVenue(),
                 event.getLocation(),
-                event.getStartTime(),
+                startTime,
                 event.getEndTime(),
                 event.getStatus(),
-                availability(event, remaining),
+                availability(event, remaining, !ticketTypes.isEmpty()),
                 event.getCoverImagePath(),
                 minPrice,
                 capacity,
@@ -168,14 +220,16 @@ public class EventService {
                         .toList());
     }
 
-    private String availability(Event event, long remainingTickets) {
+    private String availability(Event event, long remainingTickets, boolean hasTicketTypes) {
         if (event.getStatus() == EventStatus.CANCELLED) {
             return "CANCELLED";
         }
-        if (event.getEndTime() != null && !event.getEndTime().isAfter(LocalDateTime.now())) {
+        LocalDateTime now = LocalDateTime.now();
+        if ((event.getEndTime() != null && !event.getEndTime().isAfter(now))
+                || (event.getStartTime() != null && !event.getStartTime().isAfter(now))) {
             return "ENDED";
         }
-        return remainingTickets <= 0 ? "SOLD_OUT" : "AVAILABLE";
+        return hasTicketTypes && remainingTickets == 0 ? "SOLD_OUT" : "AVAILABLE";
     }
 
     private boolean matchesSearch(Event event, String search) {
@@ -195,24 +249,38 @@ public class EventService {
     }
 
     private void validateEventTimes(Event event) {
+        if (event.getStartTime() == null && event.getDateTime() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Event start time and end time are required");
+        }
+        if (event.getStartTime() == null && event.getDateTime() != null) {
+            event.setStartTime(event.getDateTime());
+        }
+        if (event.getDateTime() == null && event.getStartTime() != null) {
+            event.setDateTime(event.getStartTime());
+        }
+        if (event.getCategory() == null || event.getCategory().isBlank()) {
+            event.setCategory("Other");
+        }
+        if (event.getStartTime() != null) {
+            event.setStartTime(event.getStartTime().withNano(0));
+        }
+        if (event.getEndTime() != null) {
+            event.setEndTime(event.getEndTime().withNano(0));
+        }
         if (event.getStartTime() == null || event.getEndTime() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event start time and end time are required");
         }
         if (!event.getEndTime().isAfter(event.getStartTime())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Event end time must be later than start time");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "End time must be after start time.");
         }
     }
 
-    // TEMPORARY BYPASS FOR DEMO
     private void checkOrganizer(Event event, String organizerUsername) {
-        /*
-        if (organizerUsername == null
-                || !organizerUsername.equals(
-                        event.getOrganizerUsername())) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
+        if (organizerUsername != null && !organizerUsername.isBlank()
+                && !isOwner(event, organizerUsername)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only the event organizer can perform this action");
         }
-        */
     }
 }

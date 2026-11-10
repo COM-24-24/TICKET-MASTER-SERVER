@@ -214,6 +214,7 @@ class AppAlignedApiIntegrationTests {
         JsonNode event = response.get(0);
         assertEquals("Jazz Night", event.path("title").asText());
         assertEquals("PUBLISHED", event.path("status").asText());
+        assertTrue(event.path("genre").isNull());
         assertEquals("AVAILABLE", event.path("availability").asText());
         assertEquals("/uploads/events/jazz.png", event.path("coverImagePath").asText());
         assertEquals(60, event.path("capacity").asLong());
@@ -222,6 +223,208 @@ class AppAlignedApiIntegrationTests {
         assertEquals(2, event.path("ticketTypes").size());
         assertEquals(40, event.path("ticketTypes").get(0).path("remaining").asInt());
         assertNotNull(LocalDateTime.parse(event.path("startTime").asText()));
+    }
+
+    @Test
+    void eventTicketTypesAndAggregatesAreIsolatedAndListMatchesDetail() throws Exception {
+        User organizer = saveUser("isolated-events@example.test", User.Role.ORGANIZER);
+        Event first = saveEvent(organizer, "First event", "Concerts", "Hall A",
+                "Blantyre", EventStatus.PUBLISHED, 5);
+        Event second = saveEvent(organizer, "Second event", "Concerts", "Hall B",
+                "Lilongwe", EventStatus.PUBLISHED, 6);
+        saveTicketType(first, "First type", "150.00", 250, 0);
+        saveTicketType(first, "Second type", "300.00", 50, 0);
+        saveTicketType(second, "Other event type", "25.00", 550, 0);
+
+        JsonNode list = objectMapper.readTree(mockMvc.perform(get("/api/events"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode firstListItem = findEvent(list, first.getId());
+        JsonNode firstDetail = objectMapper.readTree(mockMvc.perform(get("/api/events/{id}", first.getId()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        JsonNode secondDetail = objectMapper.readTree(mockMvc.perform(get("/api/events/{id}", second.getId()))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+
+        assertEquals(2, firstListItem.path("ticketTypes").size());
+        assertEquals(firstListItem.path("ticketTypes"), firstDetail.path("ticketTypes"));
+        assertEquals("First type", firstDetail.path("ticketTypes").get(0).path("name").asText());
+        assertEquals(300, firstDetail.path("capacity").asLong());
+        assertEquals(0, new BigDecimal("150.00").compareTo(firstDetail.path("minPrice").decimalValue()));
+        assertEquals(1, secondDetail.path("ticketTypes").size());
+        assertEquals("Other event type", secondDetail.path("ticketTypes").get(0).path("name").asText());
+        assertEquals(550, secondDetail.path("capacity").asLong());
+        assertFalse(firstDetail.path("ticketTypes").toString().contains("Other event type"));
+    }
+
+    @Test
+    void noTicketTypesHaveZeroPriceAndCapacityAndCannotBePublished() throws Exception {
+        User organizer = saveUser("no-tickets@example.test", User.Role.ORGANIZER);
+        Event event = saveEvent(organizer, "No tickets", "Other", "Hall",
+                "Blantyre", EventStatus.DRAFT, 5);
+        String token = jwtService.generateToken(
+                userDetailsService.loadUserByUsername(organizer.getEmail()));
+
+        MvcResult detail = mockMvc.perform(get("/api/events/{id}", event.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andReturn();
+        JsonNode response = objectMapper.readTree(detail.getResponse().getContentAsString());
+        assertEquals(0, response.path("minPrice").decimalValue().compareTo(BigDecimal.ZERO));
+        assertEquals(0, response.path("capacity").asLong());
+        assertTrue(response.path("ticketTypes").isEmpty());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/api/events/{id}/publish", event.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Add at least one ticket type before publishing."));
+    }
+
+    @Test
+    void eventCreationFallsBackToDateTimeAndRejectsEndBeforeStart() throws Exception {
+        JsonNode auth = register("event-time-owner@example.test", "Event Time Owner");
+        LocalDateTime start = LocalDateTime.now().plusDays(5).withNano(0);
+        String body = json(Map.of(
+                "title", "DateTime fallback",
+                "venue", "Hall",
+                "location", "Blantyre",
+                "dateTime", start.toString(),
+                "endTime", start.plusHours(2).toString()));
+        JsonNode created = objectMapper.readTree(mockMvc.perform(post("/api/events")
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        assertEquals(start.toString(), created.path("startTime").asText());
+        assertEquals(start.toString(), created.path("dateTime").asText());
+        assertEquals("Other", created.path("category").asText());
+        assertEquals(start, LocalDateTime.parse(created.path("startTime").asText()));
+        assertEquals(start, LocalDateTime.parse(created.path("dateTime").asText()));
+        assertEquals(0, LocalDateTime.parse(created.path("startTime").asText())
+                .getNano());
+
+        String invalid = json(Map.of(
+                "title", "Invalid event time",
+                "venue", "Hall",
+                "location", "Blantyre",
+                "startTime", start.toString(),
+                "endTime", start.minusMinutes(1).toString()));
+        mockMvc.perform(post("/api/events")
+                        .header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalid))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("End time must be after start time."));
+    }
+
+    @Test
+    void eventGenreLocationAndAvailabilityAreReturnedAndTypesCanBeRenamedOrDeleted() throws Exception {
+        User organizer = saveUser("event-fields-owner@example.test", User.Role.ORGANIZER);
+        String token = jwtService.generateToken(
+                userDetailsService.loadUserByUsername(organizer.getEmail()));
+        Event event = saveEvent(organizer, "Fields event", "Concerts", "Comesa Hall",
+                "Blantyre", EventStatus.DRAFT, 5);
+        Event otherOwnerEvent = saveEvent(
+                saveUser("other-ticket-owner@example.test", User.Role.ORGANIZER),
+                "Other owner's event", "Other", "Other Hall", "Mzuzu", EventStatus.PUBLISHED, 5);
+        TicketType otherOwnersType = saveTicketType(otherOwnerEvent, "Owned elsewhere", "75.00", 5, 0);
+        event.setGenre("Afrobeats");
+        eventRepository.save(event);
+        TicketType unsold = saveTicketType(event, "Old name", "120.00", 20, 0);
+        TicketType sold = saveTicketType(event, "Sold name", "250.00", 10, 1);
+
+        mockMvc.perform(get("/api/events/{id}", event.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.venue").value("Comesa Hall"))
+                .andExpect(jsonPath("$.location").value("Blantyre"))
+                .andExpect(jsonPath("$.category").value("Concerts"))
+                .andExpect(jsonPath("$.genre").value("Afrobeats"))
+                .andExpect(jsonPath("$.availability").value("AVAILABLE"));
+        Event soldOut = saveEvent(organizer, "Sold out event", "Sports", "Stadium",
+                "Blantyre", EventStatus.PUBLISHED, 7);
+        saveTicketType(soldOut, "Seat", "200.00", 10, 10);
+        Event ended = saveEvent(organizer, "Ended event", "Workshop", "Studio",
+                "Lilongwe", EventStatus.PUBLISHED, -3);
+        Event cancelledEvent = saveEvent(organizer, "Cancelled event", "Festival", "Park",
+                "Mzuzu", EventStatus.CANCELLED, 5);
+        assertEquals("SOLD_OUT", eventAvailability(soldOut.getId()));
+        assertEquals("ENDED", eventAvailability(ended.getId()));
+        assertEquals("CANCELLED", eventAvailability(cancelledEvent.getId()));
+        mockMvc.perform(put("/api/events/{id}", event.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "title", "Fields event updated",
+                                "category", "Workshop",
+                                "genre", "Jazz",
+                                "venue", "Updated Hall",
+                                "location", "Lilongwe",
+                                "startTime", event.getStartTime().plusDays(1).toString(),
+                                "endTime", event.getEndTime().plusDays(1).toString()))))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/events/{id}", event.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Fields event updated"))
+                .andExpect(jsonPath("$.category").value("Workshop"))
+                .andExpect(jsonPath("$.genre").value("Jazz"))
+                .andExpect(jsonPath("$.venue").value("Updated Hall"))
+                .andExpect(jsonPath("$.location").value("Lilongwe"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/ticket-types/{id}", otherOwnersType.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/ticket-types/{id}", unsold.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Standard\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Standard"));
+        mockMvc.perform(put("/api/ticket-types/{id}", sold.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Must not rename\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Sold name"));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/ticket-types/{id}", sold.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Tickets were already sold for this type."));
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/ticket-types/{id}", unsold.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/ticket-types/{id}", Long.MAX_VALUE)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+
+        Event cancelled = saveEvent(organizer, "Cancelled draft", "Other", "Hall",
+                "Blantyre", EventStatus.CANCELLED, 5);
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/api/events/{id}/publish", cancelled.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
+
+        JsonNode anotherOrganizer = register("different-owner@example.test", "Different Owner");
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .patch("/api/events/{id}/publish", event.getId())
+                        .header("Authorization", bearer(anotherOrganizer)))
+                .andExpect(status().isForbidden());
+    }
+
+    private String eventAvailability(Long eventId) throws Exception {
+        String content = mockMvc.perform(get("/api/events/{id}", eventId))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(content).path("availability").asText();
+    }
+
+    private JsonNode findEvent(JsonNode events, Long id) {
+        for (JsonNode event : events) {
+            if (event.path("id").asLong() == id) {
+                return event;
+            }
+        }
+        throw new AssertionError("Event not present in public list: " + id);
     }
 
     @Test

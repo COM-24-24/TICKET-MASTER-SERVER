@@ -23,6 +23,21 @@
 
 The first dev-profile startup seeds the development accounts and sample events. Uploaded covers are stored in the named `ticketmaster_uploads` volume.
 
+To audit ticket-type event assignments in MariaDB:
+
+```sql
+SELECT tt.id AS ticket_type_id,
+       tt.name AS ticket_type_name,
+       tt.event_id,
+       e.title AS event_title,
+       tt.price,
+       tt.total_quantity,
+       tt.quantity_sold
+FROM ticket_types tt
+JOIN events e ON e.id = tt.event_id
+ORDER BY tt.event_id, tt.price, tt.id;
+```
+
 ## Demo payments
 
 Demo payments are enabled by default for the Docker Compose `dev` profile. To disable them, set `APP_DEMO_PAYMENT_ENABLED=false` in `.env` and recreate the backend:

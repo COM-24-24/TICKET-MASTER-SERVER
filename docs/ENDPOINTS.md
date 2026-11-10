@@ -24,7 +24,8 @@ Send authenticated requests with `Authorization: Bearer <token>`. JSON request a
 | `GET /api/events/{eventId}/ticket-types` | Public | List ticket types; optional `name` filter |
 | `GET /api/ticket-types/{id}` | Public | Get one ticket type |
 | `POST /api/events/{eventId}/ticket-types` | Authenticated | Add a ticket type |
-| `PUT /api/ticket-types/{id}` | Authenticated | Update ticket type stock/price |
+| `PUT /api/ticket-types/{id}` | Authenticated | Update ticket type name (when unsold), stock and price |
+| `DELETE /api/ticket-types/{id}` | ORGANIZER owner | Delete an unsold ticket type |
 | `GET /api/interests` | Public | List available interests |
 | `GET /api/customers/me` | Authenticated | Get or auto-create the current profile |
 | `PUT /api/customers/me` | Authenticated | Update the current profile |
@@ -83,45 +84,34 @@ Successful response (`AuthResponse`):
 
 `role` is optional and defaults to `CUSTOMER`. Outside the dev profile, requesting another role returns 403.
 
-### Event list
+### Event list and details
 
-`GET /api/events?category=Concerts&search=Afro` returns `EventResponse` objects:
+`GET /api/events?category=Concerts&search=Afro` and `GET /api/events/{id}` return the same `EventResponse` shape. Ticket aggregates are calculated only from that event's own ticket types:
 
 ```json
 {
-  "id": 42,
+  "id": 7,
   "title": "AfroFusion Live 2026",
   "category": "Concerts",
+  "genre": null,
   "venue": "Comesa Hall",
   "location": "Blantyre",
-  "startTime": "2026-12-05T15:00:00",
-  "endTime": "2026-12-05T21:00:00",
+  "startTime": "2026-11-21T18:00:00",
+  "endTime": "2026-11-21T23:30:00",
   "status": "PUBLISHED",
   "availability": "AVAILABLE",
-  "coverImagePath": "/uploads/events/afrofusion-live-2026.jpg",
-  "minPrice": 15000.00,
-  "capacity": 45000,
-  "remainingTickets": 45000,
+  "coverImagePath": "/uploads/events/8f3a1c2e.jpg",
+  "minPrice": 15000,
+  "capacity": 300,
+  "remainingTickets": 300,
   "ticketTypes": [
-    {
-      "id": 101,
-      "name": "Standard",
-      "price": 15000.00,
-      "totalQuantity": 15000,
-      "remaining": 15000
-    },
-    {
-      "id": 102,
-      "name": "VIP",
-      "price": 30000.00,
-      "totalQuantity": 30000,
-      "remaining": 30000
-    }
+    {"id": 11, "name": "Standard", "price": 15000, "totalQuantity": 250, "remaining": 250},
+    {"id": 12, "name": "VIP", "price": 30000, "totalQuantity": 50, "remaining": 50}
   ]
 }
 ```
 
-Availability is computed as `AVAILABLE`, `SOLD_OUT`, `ENDED`, or `CANCELLED`. Event creation/update continues to accept the existing event entity request fields (`title`, `category`, `venue`, `location`, `startTime`, and `endTime`).
+Availability is `CANCELLED` for cancelled events, `ENDED` when the start or end has passed, `SOLD_OUT` only when ticket types exist and none remain, or `AVAILABLE`. Events accept `title`, `category` (defaults to `Other`), nullable `genre` (maximum 80 characters), `venue`, `location`, and `startTime` or legacy `dateTime`; either start field fills the other. End time must be later than start time. Dates serialize as ISO local date-times without timezone or milliseconds.
 
 ### Place an order
 

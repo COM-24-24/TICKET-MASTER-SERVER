@@ -44,7 +44,13 @@ public class TicketTypeController {
     public TicketType update(@PathVariable Long id,
             @RequestBody CreateTicketTypeRequest req,
             Authentication auth) {
-        return service.update(id, req.price, req.totalQuantity, getUsername(auth));
+        return service.update(id, req.name, req.price, req.totalQuantity, getUsername(auth));
+    }
+
+    @DeleteMapping("/ticket-types/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id, Authentication auth) {
+        service.delete(id, getUsername(auth));
     }
 
     // new

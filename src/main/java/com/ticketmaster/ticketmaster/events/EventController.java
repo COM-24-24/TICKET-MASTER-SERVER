@@ -61,7 +61,7 @@ public class EventController {
             Authentication authentication) {
 
         return eventService.editEvent(
-                id, event, getOrganizerUsername(authentication));
+                id, event, authentication == null ? null : authentication.getName());
     }
 
     // Publish an event
@@ -72,7 +72,7 @@ public class EventController {
             Authentication authentication) {
 
         return eventService.publishEvent(
-                id, getOrganizerUsername(authentication));
+                id, authentication == null ? null : authentication.getName());
     }
 
     // Cancel an event
@@ -83,7 +83,7 @@ public class EventController {
             Authentication authentication) {
 
         return eventService.cancelEvent(
-                id, getOrganizerUsername(authentication));
+                id, authentication == null ? null : authentication.getName());
     }
 
     // Get username from the logged-in user

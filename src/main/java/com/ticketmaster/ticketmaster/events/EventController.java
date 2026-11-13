@@ -37,7 +37,7 @@ public class EventController {
 
     // Get all events
     @GetMapping
-    @Operation(summary = "List published and cancelled events with optional filters")
+    @Operation(summary = "List published events with optional filters")
     public List<EventResponse> getAllEvents(
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String search) {

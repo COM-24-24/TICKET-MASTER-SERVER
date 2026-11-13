@@ -55,7 +55,7 @@ public class EventService {
         String normalizedCategory = normalize(category);
         String normalizedSearch = normalize(search);
         List<Event> events = eventRepository.findByStatusInOrderByStartTimeAsc(
-                        List.of(EventStatus.PUBLISHED, EventStatus.CANCELLED))
+                        List.of(EventStatus.PUBLISHED))
                 .stream()
                 .filter(event -> normalizedCategory == null
                         || Objects.equals(normalize(event.getCategory() == null

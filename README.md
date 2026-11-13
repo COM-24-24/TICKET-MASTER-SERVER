@@ -9,7 +9,7 @@ Spring Boot backend for an event ticketing system. Handles event discovery, tick
 ## Event Discovery and Payments
 
 - Event `LocalDateTime` fields are serialized as ISO-8601 strings without a timezone offset, for example `2026-12-05T15:00:00`.
-- `GET /api/events?category=Music&search=stadium` returns published and cancelled events in start-time order. Search matches title, venue, or location without regard to case.
+- `GET /api/events?category=Music&search=stadium` returns published events in start-time order. Cancelled and draft events are excluded. Search matches title, venue, or location without regard to case.
 - `GET /api/events/{id}` returns event details, availability, capacity and remaining-ticket totals, minimum price, and `ticketTypes` with price and inventory.
 - `GET /api/events/nearby?latitude=...&longitude=...&radiusKm=...` returns events ordered by Haversine distance with `distanceKm` and supports pagination.
 - `GET /api/events/recommended?interests=Music&interests=Sports` matches categories provided by the customer-interest source (Beatrice's service).

@@ -47,7 +47,7 @@ Never put PayChangu credentials or other server secrets in the app. Payment cred
 
 The event response contains `id`, `title`, `category`, `venue`, `location`, `startTime`, `endTime`, `status`, `availability`, `coverImagePath`, `minPrice`, `capacity`, `remainingTickets`, and `ticketTypes`. Each embedded ticket type contains `id`, `name`, `price`, `totalQuantity`, and `remaining`.
 
-The list endpoint can return published and cancelled events. A listing is not a guarantee that an event is currently purchasable. The app must prevent or clearly disable purchase when the event is not `PUBLISHED`, availability is not `AVAILABLE`, the event has ended, or a requested ticket type has no remaining inventory. The server independently rechecks eligibility and stock when an order is submitted.
+The public list endpoint returns published events only. A listing is not a guarantee that an event is currently purchasable. The app must prevent or clearly disable purchase when availability is not `AVAILABLE`, the event has ended, or a requested ticket type has no remaining inventory. The server independently rechecks eligibility and stock when an order is submitted.
 
 There is no general pagination parameter documented for the event list. Do not invent one. The README describes nearby/recommended discovery, but those routes do not appear in the checked-in OpenAPI file or the inspected event controller. Treat them as unavailable until confirmed against the running server.
 
@@ -242,7 +242,7 @@ The checked-in endpoint guide, OpenAPI snapshot, and implementation are not perf
 | Nearby/recommended event routes are unconfirmed | The README describes them, but the checked-in OpenAPI route list and inspected `EventController` do not expose them. Do not make them required app dependencies without checking the deployed API. |
 | Payment callback, return, and webhook routes are absent from checked-in OpenAPI | They are implemented in `PaymentController` and listed in `ENDPOINTS.md`. The app should use the configured app redirect and `/api/payments/verify`, not rely on the OpenAPI snapshot to discover gateway behavior. |
 | OpenAPI snapshot is not the complete runtime contract | Use the endpoint guide and controllers/services together; prefer the running server's `/v3/api-docs` for the current schema and confirm that it matches the deployed version. |
-| Event list includes non-purchasable states | The endpoint guide says published and cancelled events can be returned. UI filtering must use status/availability and order submission must still handle server-side rejection. |
+| Event list includes non-purchasable states | The public list now excludes cancelled and draft events; the app should still use event availability and order submission must still handle server-side rejection. |
 
 These are documentation/API-surface alignment issues, not a claim that the purchase flow is broken. Resolve them before requiring optional discovery features or treating the checked-in OpenAPI JSON as exhaustive.
 

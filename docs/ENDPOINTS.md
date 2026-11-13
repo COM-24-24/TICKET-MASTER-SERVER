@@ -13,7 +13,7 @@ Send authenticated requests with `Authorization: Bearer <token>`. JSON request a
 | `POST /api/auth/login` | Public | Email/password login |
 | `POST /api/auth/google` | Public | Google ID-token login |
 | `POST /api/auth/refresh` | Public | Refresh an access token |
-| `GET /api/events?category=&search=` | Public | Published and cancelled events; case-insensitive category/search filters |
+| `GET /api/events?category=&search=` | Public | Published events only; case-insensitive category/search filters |
 | `GET /api/events/{id}` | Public; draft only for its owner | Event details |
 | `POST /api/events` | Authenticated | Create a draft event |
 | `PUT /api/events/{id}` | Authenticated owner | Update an event |

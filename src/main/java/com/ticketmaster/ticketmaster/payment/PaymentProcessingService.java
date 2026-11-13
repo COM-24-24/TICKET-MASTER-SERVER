@@ -22,6 +22,7 @@ import org.springframework.beans.factory.annotation.Value;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -187,6 +188,11 @@ public class PaymentProcessingService {
         paymentRepository.save(payment);
         orderService.markOrderPaid(payment.getOrderId(), "PAYCHANGU:" + payment.getTxRef());
         return "success";
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Long> findOrderIdByTxRef(String txRef) {
+        return paymentRepository.findByTxRef(txRef).map(Payment::getOrderId);
     }
 
     @Transactional

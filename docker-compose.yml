@@ -28,7 +28,7 @@ services:
     image: ticketmaster-backend:local
     container_name: ticketmaster-backend
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8081:8080"
     env_file: .env
     environment:
       SPRING_PROFILES_ACTIVE: dev
@@ -49,7 +49,6 @@ services:
       APP_UPLOADS_DIR: /app/uploads
     volumes:
       - ticketmaster_uploads:/app/uploads
-      - ./uploads:/app/uploads
     healthcheck:
       test:
         ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health || exit 1"]

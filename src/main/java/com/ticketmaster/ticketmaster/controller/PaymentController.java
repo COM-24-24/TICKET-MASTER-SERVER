@@ -23,6 +23,7 @@ import org.springframework.web.util.UriUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/payments")
@@ -125,7 +126,16 @@ public class PaymentController {
     private void redirect(String txRef, String status, HttpServletResponse response)
             throws IOException {
         String separator = appRedirectUri.contains("?") ? "&" : "?";
-        String location = appRedirectUri + separator + "status="
+        String location = appRedirectUri + separator;
+        Optional<Long> orderId = txRef == null || txRef.isBlank()
+                ? Optional.empty()
+                : paymentProcessingService.findOrderIdByTxRef(txRef);
+        if (orderId.isPresent()) {
+            location += "orderId="
+                    + UriUtils.encodeQueryParam(String.valueOf(orderId.get()), StandardCharsets.UTF_8)
+                    + "&";
+        }
+        location += "status="
                 + UriUtils.encodeQueryParam(status, StandardCharsets.UTF_8);
         if (txRef != null && !txRef.isBlank()) {
             location += "&tx_ref=" + UriUtils.encodeQueryParam(txRef, StandardCharsets.UTF_8);

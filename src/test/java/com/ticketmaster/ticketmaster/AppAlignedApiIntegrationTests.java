@@ -779,7 +779,8 @@ class AppAlignedApiIntegrationTests {
         mockMvc.perform(get("/api/payments/callback").param("tx_ref", txRef))
                 .andExpect(status().isFound())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
-                        .redirectedUrl("myapp://payment-result?status=success&tx_ref=" + txRef));
+                        .redirectedUrl("myapp://payment-result?orderId=" + orderId
+                                + "&status=success&tx_ref=" + txRef));
         MvcResult verified = mockMvc.perform(post("/api/payments/verify")
                         .header("Authorization", bearer(customer))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -836,7 +837,8 @@ class AppAlignedApiIntegrationTests {
                         .param("status", "failed"))
                 .andExpect(status().isFound())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
-                        .redirectedUrl("myapp://payment-result?status=success&tx_ref=" + txRef));
+                        .redirectedUrl("myapp://payment-result?orderId=" + orderId
+                                + "&status=success&tx_ref=" + txRef));
         verify(payChanguService, times(1)).verify(txRef);
     }
 

@@ -148,7 +148,7 @@ The app must:
 
 ### E. Return and verify payment
 
-The backend's default app redirect URI is `myapp://payment-result`, configurable with `APP_PAYMENT_REDIRECT_URI` / `app.payment.app-redirect-uri`. The callback/return redirects append `status` and (when available) `tx_ref`.
+The backend's default app redirect URI is `myapp://payment-result`, configurable with `APP_PAYMENT_REDIRECT_URI` / `app.payment.app-redirect-uri`. The callback/return handlers verify the transaction and append its `orderId`, verified `status`, and `tx_ref`. The app must use the order ID to call authenticated `/api/payments/verify`; redirect query values are not proof of payment.
 
 `status` is backend callback information and `tx_ref` is for correlation only. Neither query parameter is independently proof of payment. Treat an app link as a signal to resume verification, not as a payment receipt.
 

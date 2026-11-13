@@ -1,6 +1,6 @@
 # Backend API endpoints
 
-Base URL: `http://localhost:8080`. OpenAPI JSON is available at `/v3/api-docs`; Swagger UI is at `/swagger-ui.html`.
+Base URL with Docker Compose: `http://localhost:8081` (container port `8080` is published on host port `8081`). OpenAPI JSON is available at `/v3/api-docs`; Swagger UI is at `/swagger-ui.html`.
 
 Send authenticated requests with `Authorization: Bearer <token>`. JSON request and response dates use ISO-8601 local date-time strings, for example `2026-12-05T15:00:00` (no timezone suffix).
 

@@ -115,6 +115,7 @@ class AppAlignedApiIntegrationTests {
         long userId = registered.path("user").path("id").asLong();
 
         assertFalse(registered.path("token").asText().isBlank());
+        assertEquals(userId, registered.path("user").path("id").asLong());
         assertEquals("Ada Lovelace", registered.path("user").path("name").asText());
         assertEquals("ada@example.test", registered.path("user").path("email").asText());
         assertEquals("CUSTOMER", registered.path("user").path("role").asText());
@@ -156,6 +157,33 @@ class AppAlignedApiIntegrationTests {
     }
 
     @Test
+    void loginAndRefreshReturnTheAuthenticatedUserObject() throws Exception {
+        JsonNode registered = register("refresh-profile@example.test", "Refresh Person");
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "email", "refresh-profile@example.test",
+                                "password", "password123"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.id").value(registered.path("user").path("id").asLong()))
+                .andExpect(jsonPath("$.user.name").value("Refresh Person"))
+                .andExpect(jsonPath("$.user.email").value("refresh-profile@example.test"))
+                .andExpect(jsonPath("$.user.role").value("CUSTOMER"))
+                .andReturn();
+        JsonNode login = objectMapper.readTree(loginResult.getResponse().getContentAsString());
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("refreshToken", login.path("refreshToken").asText()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.id").value(registered.path("user").path("id").asLong()))
+                .andExpect(jsonPath("$.user.name").value("Refresh Person"))
+                .andExpect(jsonPath("$.user.email").value("refresh-profile@example.test"))
+                .andExpect(jsonPath("$.user.role").value("CUSTOMER"));
+    }
+
+    @Test
     void profileAutoCreatesForAuthenticatedEmailAndDoesNotCrossUsers() throws Exception {
         JsonNode alice = register("alice@example.test", "Alice Example");
         JsonNode bob = register("bob@example.test", "Bob Example");
@@ -168,7 +196,10 @@ class AppAlignedApiIntegrationTests {
                         .header("Authorization", bearer(alice)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(aliceId))
-                .andExpect(jsonPath("$.fullName").value("alice"));
+                .andExpect(jsonPath("$.fullName").value("alice"))
+                .andExpect(jsonPath("$.email").value("alice@example.test"))
+                .andExpect(jsonPath("$.name").value("alice"))
+                .andExpect(jsonPath("$.role").value("CUSTOMER"));
 
         mockMvc.perform(put("/api/customers/me")
                         .header("Authorization", bearer(alice))
@@ -178,7 +209,10 @@ class AppAlignedApiIntegrationTests {
                                  "latitude":null,"longitude":null}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId").value(aliceId));
+                .andExpect(jsonPath("$.userId").value(aliceId))
+                .andExpect(jsonPath("$.email").value("alice@example.test"))
+                .andExpect(jsonPath("$.name").value("Alice Updated"))
+                .andExpect(jsonPath("$.role").value("CUSTOMER"));
 
         assertEquals("Alice Updated", customerProfileRepository.findByUserId(aliceId)
                 .orElseThrow().getFullName());

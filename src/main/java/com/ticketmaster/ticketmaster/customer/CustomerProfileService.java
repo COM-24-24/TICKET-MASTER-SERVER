@@ -20,7 +20,7 @@ public class CustomerProfileService {
         this.userRepository = userRepository;
     }
 
-    private Long currentUserId() {
+    private User currentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()
                 || "anonymousUser".equals(auth.getPrincipal())) {
@@ -28,26 +28,24 @@ public class CustomerProfileService {
         }
         return userRepository.findByEmail(auth.getName())
                 .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED, "Authenticated user not found."))
-                .getId();
+                        HttpStatus.UNAUTHORIZED, "Authenticated user not found."));
     }
 
     @Transactional
     public CustomerProfileResponse getMyProfile() {
-        Long userId = currentUserId();
+        User user = currentUser();
+        Long userId = user.getId();
         CustomerProfile p = repo.findByUserId(userId)
                 .orElseGet(() -> {
-                    User user = userRepository.findById(userId)
-                            .orElseThrow(() -> new ResponseStatusException(
-                                    HttpStatus.UNAUTHORIZED, "Authenticated user not found."));
                     return repo.save(new CustomerProfile(userId, emailPrefix(user.getEmail())));
                 });
-        return CustomerProfileResponse.from(p);
+        return CustomerProfileResponse.from(p, user);
     }
 
     @Transactional
     public CustomerProfileResponse updateMyProfile(CustomerProfileRequest req) {
-        Long userId = currentUserId();
+        User user = currentUser();
+        Long userId = user.getId();
         CustomerProfile p = repo.findByUserId(userId)
                 .orElseGet(() -> new CustomerProfile(userId, req.fullName()));
 
@@ -57,7 +55,7 @@ public class CustomerProfileService {
         p.setLatitude(req.latitude());
         p.setLongitude(req.longitude());
 
-        return CustomerProfileResponse.from(repo.save(p));
+        return CustomerProfileResponse.from(repo.save(p), user);
     }
 
     /** Call this from the registration flow once the User module exists. */

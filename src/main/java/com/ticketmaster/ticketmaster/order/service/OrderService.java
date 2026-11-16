@@ -172,7 +172,7 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException("Order not found."));
 
         if (!order.getUser().getEmail().equals(email)) {
-            throw new AccessDeniedException("You are not authorized to view this order.");
+            throw new NotFoundException("Order not found.");
         }
 
         return mapToResponse(order);
@@ -262,7 +262,7 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException("Order not found."));
 
         if (!order.getUser().getEmail().equals(email)) {
-            throw new AccessDeniedException("You are not authorized to cancel this order.");
+            throw new NotFoundException("Order not found.");
         }
 
         if (order.getStatus() != Order.OrderStatus.PENDING) {

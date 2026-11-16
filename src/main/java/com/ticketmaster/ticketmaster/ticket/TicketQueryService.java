@@ -10,11 +10,8 @@ import com.ticketmaster.ticketmaster.repository.PaymentRepository;
 import com.ticketmaster.ticketmaster.ticket.dto.TicketResponse;
 import com.ticketmaster.ticketmaster.user.entity.User;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
-import org.springframework.http.HttpStatus;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -52,13 +49,7 @@ public class TicketQueryService {
     public TicketResponse getMyTicketById(Long ticketId, Long ownerId) {
         return ticketRepository.findByIdAndOwnerId(ticketId, ownerId)
                 .map(this::toResponse)
-                .orElseThrow(() -> {
-                    if (ticketRepository.existsById(ticketId)) {
-                        return new ResponseStatusException(HttpStatus.FORBIDDEN,
-                                "Ticket not found or you do not have permission to view it.");
-                    }
-                    return new NotFoundException("Ticket not found.");
-                });
+                .orElseThrow(() -> new NotFoundException("Ticket not found."));
     }
 
     @Transactional(readOnly = true)
@@ -66,7 +57,7 @@ public class TicketQueryService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found."));
         if (!order.getUser().getId().equals(ownerId)) {
-            throw new AccessDeniedException("You are not authorized to view this order.");
+            throw new NotFoundException("Order not found.");
         }
         return ticketRepository.findAllByOrderId(orderId)
                 .stream()

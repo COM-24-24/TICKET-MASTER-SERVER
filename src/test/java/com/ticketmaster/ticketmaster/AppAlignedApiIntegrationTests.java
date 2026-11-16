@@ -221,6 +221,67 @@ class AppAlignedApiIntegrationTests {
     }
 
     @Test
+    void ticketAndOrderReadsAndCancellationAreScopedToAuthenticatedOwner() throws Exception {
+        JsonNode alice = register("alice-purchases@example.test", "Alice Purchases");
+        JsonNode bob = register("bob-purchases@example.test", "Bob Purchases");
+        User organizer = saveUser("purchase-event-owner@example.test", User.Role.ORGANIZER);
+        Event event = saveEvent(organizer, "Ownership Event", "Music", "Main Hall",
+                "Lilongwe", EventStatus.PUBLISHED, 4);
+        TicketType ticketType = saveTicketType(event, "Standard", "100.00", 10, 0);
+        String aliceAuthorization = bearer(alice);
+
+        JsonNode order = createOrder(aliceAuthorization, event.getId(), ticketType.getId(), 1);
+        Long orderId = order.path("id").asLong();
+        orderService.markOrderPaid(orderId, "test");
+        Long ticketId = ticketRepository.findByOwnerIdOrderByIssuedAtDesc(
+                userRepository.findByEmail("alice-purchases@example.test").orElseThrow().getId())
+                .get(0).getId();
+
+        mockMvc.perform(get("/api/tickets/my").header("Authorization", bearer(bob)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        mockMvc.perform(get("/api/orders/my").header("Authorization", bearer(bob)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        mockMvc.perform(get("/api/tickets/my").header("Authorization", aliceAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(ticketId));
+        mockMvc.perform(get("/api/orders/my").header("Authorization", aliceAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(orderId));
+        mockMvc.perform(get("/api/tickets/{id}", ticketId)
+                        .header("Authorization", aliceAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(ticketId));
+        mockMvc.perform(get("/api/orders/{id}", orderId)
+                        .header("Authorization", aliceAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(orderId));
+        mockMvc.perform(get("/api/orders/{id}/tickets", orderId)
+                        .header("Authorization", aliceAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(ticketId));
+
+        String bobAuthorization = bearer(bob);
+        mockMvc.perform(get("/api/tickets/{id}", ticketId)
+                        .header("Authorization", bobAuthorization))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/orders/{id}", orderId)
+                        .header("Authorization", bobAuthorization))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/orders/{id}/tickets", orderId)
+                        .header("Authorization", bobAuthorization))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/orders/{id}/cancel", orderId)
+                        .header("Authorization", bobAuthorization))
+                .andExpect(status().isNotFound());
+
+        assertEquals(Order.OrderStatus.PAID,
+                orderRepository.findById(orderId).orElseThrow().getStatus());
+    }
+
+    @Test
     void publicEventListFiltersAndReturnsAggregatedDtoShape() throws Exception {
         User organizer = saveUser("event-owner@example.test", User.Role.ORGANIZER);
         Event jazz = saveEvent(organizer, "Jazz Night", "Music", "Grand Hall",
@@ -732,7 +793,7 @@ class AppAlignedApiIntegrationTests {
         JsonNode order = createOrder(ownerToken, firstEvent.getId(), firstType.getId(), 1);
         mockMvc.perform(get("/api/orders/{id}", order.path("id").asLong())
                         .header("Authorization", bearer(otherAuth)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test

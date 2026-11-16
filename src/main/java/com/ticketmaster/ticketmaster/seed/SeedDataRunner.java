@@ -28,6 +28,8 @@ import java.nio.file.Path;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.awt.FontMetrics;
+import java.util.ArrayList;
 
 @Component
 @Profile("dev")
@@ -148,7 +150,7 @@ public class SeedDataRunner implements CommandLineRunner {
         ticketTypeRepository.save(ticketType);
     }
 
-    private void createCoverIfMissing(String fileName, String title) {
+    void createCoverIfMissing(String fileName, String title) {
         Path eventsDirectory = uploadsDirectory.resolve("events");
         Path cover = eventsDirectory.resolve(fileName);
         if (Files.exists(cover)) {
@@ -157,16 +159,22 @@ public class SeedDataRunner implements CommandLineRunner {
         try {
             Files.createDirectories(eventsDirectory);
             System.setProperty("java.awt.headless", "true");
-            BufferedImage image = new BufferedImage(800, 450, BufferedImage.TYPE_INT_RGB);
+            BufferedImage image = new BufferedImage(1000, 1000, BufferedImage.TYPE_INT_RGB);
             Graphics2D graphics = image.createGraphics();
             try {
-                graphics.setColor(new Color(24, 45, 70));
+                graphics.setColor(new Color(12, 22, 42));
                 graphics.fillRect(0, 0, image.getWidth(), image.getHeight());
                 graphics.setColor(new Color(70, 145, 190));
-                graphics.fillRect(0, 340, image.getWidth(), 110);
+                graphics.fillRect(0, 900, image.getWidth(), 100);
                 graphics.setColor(Color.WHITE);
-                graphics.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 28));
-                graphics.drawString(title, 36, 235);
+                graphics.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 70));
+                List<String> lines = wrapTitle(title, graphics.getFontMetrics(), 540);
+                int lineHeight = graphics.getFontMetrics().getHeight();
+                int y = (1000 - lines.size() * lineHeight) / 2 + graphics.getFontMetrics().getAscent();
+                for (String line : lines) {
+                    graphics.drawString(line, (1000 - graphics.getFontMetrics().stringWidth(line)) / 2, y);
+                    y += lineHeight;
+                }
             } finally {
                 graphics.dispose();
             }
@@ -176,6 +184,44 @@ public class SeedDataRunner implements CommandLineRunner {
         } catch (IOException exception) {
             throw new IllegalStateException("Could not create development event cover.", exception);
         }
+    }
+
+    static List<String> wrapTitle(String title, FontMetrics metrics, int maxWidth) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        for (String word : title.trim().split("\\s+")) {
+            String candidate = line.isEmpty() ? word : line + " " + word;
+            if (metrics.stringWidth(candidate) <= maxWidth) {
+                line.setLength(0);
+                line.append(candidate);
+            } else if (line.isEmpty()) {
+                lines.add(ellipsize(word, metrics, maxWidth));
+                if (lines.size() == 3) return lines;
+            } else {
+                lines.add(line.toString());
+                line.setLength(0);
+                line.append(word);
+                if (lines.size() == 2 && metrics.stringWidth(word) > maxWidth) {
+                    lines.add(ellipsize(word, metrics, maxWidth));
+                    return lines;
+                }
+                if (lines.size() == 3) return lines;
+            }
+        }
+        if (!line.isEmpty() && lines.size() < 3) lines.add(line.toString());
+        if (lines.isEmpty()) lines.add("Event");
+        if (lines.size() == 3 && metrics.stringWidth(lines.get(2)) > maxWidth) {
+            lines.set(2, ellipsize(lines.get(2), metrics, maxWidth));
+        }
+        return lines;
+    }
+
+    private static String ellipsize(String value, FontMetrics metrics, int maxWidth) {
+        String result = value;
+        while (!result.isEmpty() && metrics.stringWidth(result + "…") > maxWidth) {
+            result = result.substring(0, result.offsetByCodePoints(result.length(), -1));
+        }
+        return result + "…";
     }
 
     private String slug(String title) {

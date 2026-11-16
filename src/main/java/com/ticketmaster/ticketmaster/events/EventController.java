@@ -53,7 +53,7 @@ public class EventController {
     }
 
     // Edit an event
-    @PutMapping("/{id}")
+    @RequestMapping(path = "/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
     @Operation(summary = "Update an owned event")
     public Event editEvent(
             @PathVariable Long id,

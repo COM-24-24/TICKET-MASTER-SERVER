@@ -17,6 +17,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.UUID;
+import java.nio.file.InvalidPathException;
 
 @Service
 public class EventImageService {
@@ -71,12 +72,27 @@ public class EventImageService {
             }
             Files.write(destination, content, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
 
+            String previousPath = event.getCoverImagePath();
             String relativePath = "/uploads/events/" + filename;
             event.setCoverImagePath(relativePath);
-            eventRepository.save(event);
+            eventRepository.saveAndFlush(event);
+            deletePreviousImage(previousPath, eventDirectory, destination);
             return new EventImageResponse(relativePath);
         } catch (IOException exception) {
             throw new UncheckedIOException("Unable to store event image.", exception);
+        }
+    }
+
+    private void deletePreviousImage(String previousPath, Path eventDirectory, Path replacement) {
+        if (previousPath == null || !previousPath.startsWith("/uploads/events/")) return;
+        try {
+            Path previous = eventDirectory.resolve(previousPath.substring("/uploads/events/".length()))
+                    .normalize();
+            if (previous.startsWith(eventDirectory) && !previous.equals(replacement)) {
+                Files.deleteIfExists(previous);
+            }
+        } catch (InvalidPathException | IOException ignored) {
+            // The new image is already saved; an obsolete file can be cleaned up separately.
         }
     }
 

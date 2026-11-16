@@ -23,7 +23,7 @@ public class Event {
     private String title;
 
     @Column(length = 100)
-    private String category = "Other";
+    private String category;
 
     @Column(length = 80)
     private String genre;
@@ -112,7 +112,7 @@ public class Event {
     }
 
     public void setCategory(String category) {
-        this.category = category == null || category.isBlank() ? "Other" : category;
+        this.category = category;
     }
 
     public String getGenre() {

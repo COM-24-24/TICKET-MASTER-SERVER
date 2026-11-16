@@ -87,27 +87,21 @@ public class EventService {
         if (updatedEvent.getStartTime() == null && updatedEvent.getDateTime() == null) {
             updatedEvent.setStartTime(existingEvent.getStartTime());
         }
-        if (updatedEvent.getGenre() == null) {
-            updatedEvent.setGenre(existingEvent.getGenre());
-        }
+        if (updatedEvent.getEndTime() == null) updatedEvent.setEndTime(existingEvent.getEndTime());
         if (updatedEvent.getCategory() == null || updatedEvent.getCategory().isBlank()) {
             updatedEvent.setCategory(existingEvent.getCategory());
         }
-        if (updatedEvent.getVenue() == null) {
-            updatedEvent.setVenue(existingEvent.getVenue());
-        }
-        if (updatedEvent.getLocation() == null) {
-            updatedEvent.setLocation(existingEvent.getLocation());
-        }
-        if (updatedEvent.getEndTime() == null) {
-            updatedEvent.setEndTime(existingEvent.getEndTime());
-        }
         validateEventTimes(updatedEvent);
-        existingEvent.setTitle(updatedEvent.getTitle());
-        existingEvent.setCategory(updatedEvent.getCategory());
-        existingEvent.setGenre(updatedEvent.getGenre());
-        existingEvent.setVenue(updatedEvent.getVenue());
-        existingEvent.setLocation(updatedEvent.getLocation());
+        if (updatedEvent.getTitle() != null) existingEvent.setTitle(updatedEvent.getTitle());
+        if (updatedEvent.getCategory() != null && !updatedEvent.getCategory().isBlank()) {
+            existingEvent.setCategory(updatedEvent.getCategory());
+        }
+        if (updatedEvent.getGenre() != null) existingEvent.setGenre(updatedEvent.getGenre());
+        if (updatedEvent.getVenue() != null) existingEvent.setVenue(updatedEvent.getVenue());
+        if (updatedEvent.getLocation() != null) existingEvent.setLocation(updatedEvent.getLocation());
+        if (updatedEvent.getCoverImagePath() != null) {
+            existingEvent.setCoverImagePath(updatedEvent.getCoverImagePath());
+        }
         existingEvent.setDateTime(updatedEvent.getDateTime());
         existingEvent.setStartTime(updatedEvent.getStartTime());
         existingEvent.setEndTime(updatedEvent.getEndTime());

@@ -57,7 +57,9 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -1023,6 +1025,28 @@ class AppAlignedApiIntegrationTests {
     }
 
     @Test
+    void partialEventUpdatePreservesCoverCategoryAndGenre() throws Exception {
+        User organizer = saveUser("partial-update@example.test", User.Role.ORGANIZER);
+        Event event = saveEvent(organizer, "Partial Update", "Music", "Main Hall",
+                "Lilongwe", EventStatus.DRAFT, 4);
+        event.setGenre("Afrobeat");
+        event.setCoverImagePath("/uploads/events/existing.jpg");
+        eventRepository.saveAndFlush(event);
+        String token = jwtService.generateToken(
+                userDetailsService.loadUserByUsername(organizer.getEmail()));
+
+        mockMvc.perform(patch("/api/events/{id}", event.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"Renamed Event\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Renamed Event"))
+                .andExpect(jsonPath("$.category").value("Music"))
+                .andExpect(jsonPath("$.genre").value("Afrobeat"))
+                .andExpect(jsonPath("$.coverImagePath").value("/uploads/events/existing.jpg"));
+    }
+
+    @Test
     void organizerCanUploadOnlyImageContentToOwnedEvent() throws Exception {
         User organizer = saveUser("image-owner@example.test", User.Role.ORGANIZER);
         Event event = saveEvent(organizer, "Image Event", "Other", "Studio",
@@ -1035,6 +1059,7 @@ class AppAlignedApiIntegrationTests {
         boolean eventsDirectoryExisted = Files.exists(eventsDirectory);
         boolean uploadDirectoryExisted = Files.exists(eventsDirectory.getParent());
         Path storedImage = null;
+        Path replacementImage = null;
 
         try {
             MvcResult result = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
@@ -1055,7 +1080,29 @@ class AppAlignedApiIntegrationTests {
                     .orElseThrow().getCoverImagePath());
             mockMvc.perform(get(relativePath))
                     .andExpect(status().isOk())
+                    .andExpect(header().string("Cache-Control", org.hamcrest.Matchers.containsString("max-age=3600")))
+                    .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.IMAGE_PNG))
                     .andExpect(content().bytes(png));
+
+            byte[] jpg = {(byte) 0xff, (byte) 0xd8, (byte) 0xff, 0x00};
+            MvcResult replacement = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                            .multipart("/api/organizer/events/{eventId}/image", event.getId())
+                            .file(new MockMultipartFile("file", "new-cover.jpg", "image/jpeg", jpg))
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.coverImagePath").value(
+                            org.hamcrest.Matchers.endsWith(".jpg")))
+                    .andReturn();
+            String replacementPath = objectMapper.readTree(replacement.getResponse().getContentAsString())
+                    .path("coverImagePath").asText();
+            replacementImage = eventsDirectory.resolve(replacementPath.substring(
+                    replacementPath.lastIndexOf('/') + 1));
+            assertFalse(Files.exists(storedImage), "Replaced cover file should be deleted");
+            mockMvc.perform(get(replacementPath))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.IMAGE_JPEG));
 
             mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                             .multipart("/api/organizer/events/{eventId}/image", event.getId())
@@ -1064,7 +1111,16 @@ class AppAlignedApiIntegrationTests {
                             .header("Authorization", "Bearer " + token))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").value("Only JPG and PNG images are supported."));
+
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                            .multipart("/api/organizer/events/{eventId}/image", event.getId())
+                            .file(new MockMultipartFile("file", "large.png", "image/png",
+                                    new byte[2 * 1024 * 1024 + 1]))
+                            .header("Authorization", "Bearer " + token))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("Image must not exceed 2 MB."));
         } finally {
+            if (replacementImage != null) Files.deleteIfExists(replacementImage);
             if (storedImage != null) {
                 Files.deleteIfExists(storedImage);
             }

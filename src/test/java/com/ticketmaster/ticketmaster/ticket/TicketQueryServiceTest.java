@@ -8,7 +8,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -38,17 +37,17 @@ class TicketQueryServiceTest {
     }
 
     @Test
-    void getMyTicketByIdReturnsForbiddenWhenTicketIsNotOwnedByCustomer() {
+    void getMyTicketByIdReturnsNotFoundWhenTicketIsNotOwnedByCustomer() {
         when(ticketRepository.findByIdAndOwnerId(10L, 7L))
                 .thenReturn(Optional.empty());
         when(ticketRepository.existsById(10L)).thenReturn(true);
 
-        ResponseStatusException exception = assertThrows(
-                ResponseStatusException.class,
+        NotFoundException exception = assertThrows(
+                NotFoundException.class,
                 () -> ticketQueryService.getMyTicketById(10L, 7L)
         );
 
-        assertEquals(403, exception.getStatusCode().value());
+        assertEquals("Ticket not found.", exception.getMessage());
         verify(ticketRepository).findByIdAndOwnerId(10L, 7L);
     }
 
@@ -62,7 +61,7 @@ class TicketQueryServiceTest {
                 () -> ticketQueryService.getMyTicketById(10L, 7L)
         );
 
-        verify(ticketRepository).existsById(10L);
+        verify(ticketRepository, never()).existsById(10L);
         verify(ticketRepository, never()).findById(10L);
     }
 }

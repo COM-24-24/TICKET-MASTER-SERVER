@@ -86,7 +86,7 @@ class DevPaymentIntegrationTest {
         Long orderId = order.path("id").asLong();
         mockMvc.perform(post("/api/dev/orders/{orderId}/mark-paid", orderId)
                         .header("Authorization", bearer(otherAuth)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
 
         mockMvc.perform(post("/api/dev/orders/{orderId}/mark-paid", orderId)
                         .header("Authorization", bearer(ownerAuth)))

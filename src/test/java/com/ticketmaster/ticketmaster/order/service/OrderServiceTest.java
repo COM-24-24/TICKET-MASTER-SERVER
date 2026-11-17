@@ -81,7 +81,7 @@ class OrderServiceTest {
         
         when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
-        assertThrows(org.springframework.security.access.AccessDeniedException.class,
+        assertThrows(NotFoundException.class,
                 () -> orderService.cancelOrder(1L));
     }
 }

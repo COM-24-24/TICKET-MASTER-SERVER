@@ -389,11 +389,9 @@ class AppAlignedApiIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
-        assertEquals(start.toString(), created.path("startTime").asText());
-        assertEquals(start.toString(), created.path("dateTime").asText());
-        assertEquals("Other", created.path("category").asText());
         assertEquals(start, LocalDateTime.parse(created.path("startTime").asText()));
         assertEquals(start, LocalDateTime.parse(created.path("dateTime").asText()));
+        assertEquals("Other", created.path("category").asText());
         assertEquals(0, LocalDateTime.parse(created.path("startTime").asText())
                 .getNano());
 

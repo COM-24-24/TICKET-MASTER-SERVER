@@ -40,8 +40,6 @@ class TicketQueryServiceTest {
     void getMyTicketByIdReturnsNotFoundWhenTicketIsNotOwnedByCustomer() {
         when(ticketRepository.findByIdAndOwnerId(10L, 7L))
                 .thenReturn(Optional.empty());
-        when(ticketRepository.existsById(10L)).thenReturn(true);
-
         NotFoundException exception = assertThrows(
                 NotFoundException.class,
                 () -> ticketQueryService.getMyTicketById(10L, 7L)

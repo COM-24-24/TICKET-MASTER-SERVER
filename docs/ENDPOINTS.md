@@ -16,27 +16,27 @@ Send authenticated requests with `Authorization: Bearer <token>`. JSON request a
 | `GET /api/events?category=&search=` | Public | Published events only; case-insensitive category/search filters |
 | `GET /api/events/{id}` | Public; draft only for its owner | Event details |
 | `POST /api/events` | Authenticated | Create a draft event |
-| `PUT /api/events/{id}` | Authenticated owner | Update an event |
+| `PUT /api/events/{id}` or `PATCH /api/events/{id}` | Authenticated owner | Partial update; omitted fields keep their stored values |
 | `PATCH /api/events/{id}/publish` | Authenticated owner | Publish an event |
 | `PATCH /api/events/{id}/cancel` | Authenticated owner | Cancel an event |
 | `GET /api/organizer/events` | ORGANIZER | List the organizer's events, including drafts |
-| `POST /api/organizer/events/{eventId}/image` | ORGANIZER owner | Upload JPG/PNG cover, multipart field `file`, maximum 2 MB |
+| `POST /api/organizer/events/{eventId}/image` | ORGANIZER owner | Upload JPG/PNG cover, multipart field `file`, maximum 2 MB; replaces the prior cover |
 | `GET /api/events/{eventId}/ticket-types` | Public | List ticket types; optional `name` filter |
 | `GET /api/ticket-types/{id}` | Public | Get one ticket type |
 | `POST /api/events/{eventId}/ticket-types` | Authenticated | Add a ticket type |
 | `PUT /api/ticket-types/{id}` | Authenticated | Update ticket type name (when unsold), stock and price |
 | `DELETE /api/ticket-types/{id}` | ORGANIZER owner | Delete an unsold ticket type |
 | `GET /api/interests` | Public | List available interests |
-| `GET /api/customers/me` | Authenticated | Get or auto-create the current profile |
-| `PUT /api/customers/me` | Authenticated | Update the current profile |
+| `GET /api/customers/me` | Authenticated | Get or auto-create the profile, including authenticated-user fields |
+| `PUT /api/customers/me` | Authenticated | Update the profile and return authenticated-user fields |
 | `GET /api/customers/me/interests` | CUSTOMER | List selected interests |
 | `POST /api/customers/me/interests?interestId={id}` | CUSTOMER | Add an interest |
 | `DELETE /api/customers/me/interests/{interestId}` | CUSTOMER | Remove an interest |
 | `POST /api/orders` | CUSTOMER | Reserve stock and place a PENDING order |
 | `GET /api/orders/my` | CUSTOMER | List own orders |
-| `GET /api/orders/{id}` | CUSTOMER owner | Read an order |
-| `GET /api/orders/{id}/tickets` | CUSTOMER owner | List tickets for an order |
-| `POST /api/orders/{id}/cancel` | CUSTOMER owner | Cancel a PENDING order and release stock |
+| `GET /api/orders/{id}` | CUSTOMER owner | Read own order; another user's order returns 404 |
+| `GET /api/orders/{id}/tickets` | CUSTOMER owner | List own order tickets; another user's order returns 404 |
+| `POST /api/orders/{id}/cancel` | CUSTOMER owner | Cancel own PENDING order; another user's order returns 404 |
 | `POST /api/payments/checkout` | CUSTOMER order owner | Create a PayChangu checkout |
 | `POST /api/payments/verify` | CUSTOMER order owner | Verify payment server-side and return order/tickets |
 | `GET /api/payments/callback?tx_ref={txRef}` | Public gateway callback | Verify the transaction server-side, then redirect to the app |
@@ -45,13 +45,13 @@ Send authenticated requests with `Authorization: Bearer <token>`. JSON request a
 | `POST /api/dev/orders/{orderId}/mark-paid` | CUSTOMER order owner; only `dev` with demo enabled | Simulate a paid order |
 | `GET /api/dev/payments/checkout/{txRef}` | Public; only `dev` with demo enabled | Open the local fake PayChangu hosted checkout |
 | `POST /api/dev/payments/return?tx_ref={txRef}` | Public; only `dev` with demo enabled | Simulate success, issue tickets and redirect to the app |
-| `GET /api/tickets/my` | Authenticated owner | List own tickets |
-| `GET /api/tickets/{id}` | Authenticated owner | Read a ticket |
+| `GET /api/tickets/my` | Authenticated owner | List own tickets, or `[]` when none |
+| `GET /api/tickets/{id}` | Authenticated owner | Read own ticket; another user's ticket returns 404 |
 | `POST /api/tickets/{id}/cancel` | Authenticated owner | Cancel an unused ticket |
 | `POST /api/tickets/validate` | VALIDATOR | Validate a ticket once |
 | `GET /api/reports/events/{eventId}/sales` | Public | Event sales report |
 | `GET /api/auth/qr/{text}` | Public | Render QR content as PNG |
-| `GET /uploads/**` | Public | Serve uploaded event covers |
+| `GET /uploads/**` | Public | Serve event covers with `Cache-Control: public, max-age=3600` and `X-Content-Type-Options: nosniff` |
 
 `POST /api/orders/{id}/status` is not available. Order payment state is changed only by the verified payment flow or the development-only demo flow.
 
@@ -85,6 +85,36 @@ Successful response (`AuthResponse`):
 ```
 
 `role` is optional and defaults to `CUSTOMER`. Outside the dev profile, requesting another role returns 403.
+Register, email login, Google login, and refresh responses all include the same `user` object with `id`, `name`, `email`, and `role`.
+
+### Customer profile
+
+`GET /api/customers/me` and `PUT /api/customers/me` retain the profile fields (`id`, `userId`, `fullName`, `phone`, `city`, `latitude`, `longitude`) and also return authenticated-user fields. `email`, `name`, and `role` come from the token's user record; `name` uses the profile's `fullName`, or the email prefix when that name is blank. These three fields are response-only and cannot be changed through the profile update request.
+
+```json
+{
+  "id": 31,
+  "userId": 12,
+  "fullName": "Ada Example",
+  "phone": null,
+  "city": null,
+  "latitude": null,
+  "longitude": null,
+  "email": "customer@example.test",
+  "name": "Ada Example",
+  "role": "CUSTOMER"
+}
+```
+
+### Event image upload and update rules
+
+Event list and detail responses use `coverImagePath`, a backend-served relative path such as `/uploads/events/example.jpg`. Upload with multipart field `file` at `POST /api/organizer/events/{eventId}/image`. Only JPG and PNG image content up to 2 MB is accepted; invalid type or size returns HTTP 400 with a clear `message`. The response is `{ "coverImagePath": "/uploads/events/<name>" }`; replacing the cover removes the previous file. Upload storage uses `app.uploads-dir` (default `uploads`), which should be mounted as persistent storage in a container. GET `/uploads/**` serves files with a one-hour public cache and `nosniff`.
+
+`PUT /api/events/{id}` and `PATCH /api/events/{id}` accept partial updates. Omitted or null `coverImagePath`, `category`, and `genre` values preserve their stored values; other omitted event fields are also retained.
+
+### Ticket and order ownership
+
+The ticket and order `my` routes derive the account from the bearer token; they do not accept a user ID. A user without purchases receives an empty list. Single-record reads, order ticket lists, and order cancellation are restricted to the authenticated owner. A resource owned by another user is reported as 404 to avoid revealing that it exists.
 
 ### Event list and details
 

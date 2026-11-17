@@ -61,9 +61,6 @@ class TicketIssuingServiceTest {
         Event event = mock(Event.class);
         TicketType ticketType = mock(TicketType.class);
 
-        when(event.getId()).thenReturn(30L);
-        when(ticketType.getEvent()).thenReturn(event);
-
         when(eventRepository.findById(30L))
                 .thenReturn(Optional.of(event));
 
@@ -156,6 +153,7 @@ class TicketIssuingServiceTest {
         Order order = createPaidOrder(0);
 
         when(ticketRepository.existsByOrderId(10L)).thenReturn(false);
+        when(eventRepository.findById(30L)).thenReturn(Optional.of(mock(Event.class)));
 
         assertThrows(IllegalArgumentException.class,
                 () -> ticketIssuingService.issueTickets(order));

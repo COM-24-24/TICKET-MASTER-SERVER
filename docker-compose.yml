@@ -1,41 +1,65 @@
 services:
   # Database Service
-  mariadb:
+  db:
     image: mariadb:11.8
     container_name: ticketmaster-db
+    networks:
+      default:
+        aliases:
+          - mariadb
     environment:
-      MARIADB_ROOT_PASSWORD: root
-      MARIADB_DATABASE: ticketmaster
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${SPRING_DATASOURCE_USERNAME}
+      MARIADB_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
       - ticketmaster_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-proot"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   # Backend Service
   backend:
-    image: zymal/ticketmaster-backend:latest
+    build: .
+    image: ticketmaster-backend:local
     container_name: ticketmaster-backend
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8081:8080"
+    env_file: .env
     environment:
-      # Database connection (MariaDB driver)
-      SPRING_DATASOURCE_URL: jdbc:mariadb://mariadb:3306/ticketmaster
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root
+      SPRING_PROFILES_ACTIVE: dev
+      APP_DEMO_PAYMENT_ENABLED: ${APP_DEMO_PAYMENT_ENABLED:-false}
+      APP_DEMO_PAYMENT_BASE_URL: ${APP_DEMO_PAYMENT_BASE_URL:-http://localhost:8080}
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.mariadb.jdbc.Driver
-      
-      # Secrets passed from the .env file
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
       PAYCHANGU_SECRET_KEY: ${PAYCHANGU_SECRET_KEY}
+      PAYCHANGU_BASE_URL: ${PAYCHANGU_BASE_URL:-https://api.paychangu.com}
+      PAYCHANGU_CALLBACK_URL: ${PAYCHANGU_CALLBACK_URL}
+      PAYCHANGU_RETURN_URL: ${PAYCHANGU_RETURN_URL}
+      PAYCHANGU_WEBHOOK_SECRET: ${PAYCHANGU_WEBHOOK_SECRET:-}
+      APP_UPLOADS_DIR: /app/uploads
+    volumes:
+      - ticketmaster_uploads:/app/uploads
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     depends_on:
-      mariadb:
+      db:
         condition: service_healthy
 
 volumes:
   ticketmaster_data:
+  ticketmaster_uploads:

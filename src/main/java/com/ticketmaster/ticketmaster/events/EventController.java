@@ -1,8 +1,10 @@
 
 package com.ticketmaster.ticketmaster.events;
 
+import com.ticketmaster.ticketmaster.events.dto.EventResponse;
 import com.ticketmaster.ticketmaster.events.entity.Event;
 import com.ticketmaster.ticketmaster.events.entity.EventService;
+import io.swagger.v3.oas.annotations.Operation;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -23,6 +25,7 @@ public class EventController {
 
     // Create an event
     @PostMapping
+    @Operation(summary = "Create a draft event for the authenticated organizer")
     @ResponseStatus(HttpStatus.CREATED)
     public Event createEvent(
             @RequestBody Event event,
@@ -34,45 +37,53 @@ public class EventController {
 
     // Get all events
     @GetMapping
-    public List<Event> getAllEvents() {
-        return eventService.getAllEvents();
+    @Operation(summary = "List published events with optional filters")
+    public List<EventResponse> getAllEvents(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search) {
+        return eventService.getAllEvents(category, search);
     }
 
     // Get one event
     @GetMapping("/{id}")
-    public Event getEventById(@PathVariable Long id) {
-        return eventService.getEventById(id);
+    @Operation(summary = "Get event details; draft events are visible only to their owner")
+    public EventResponse getEventById(@PathVariable Long id, Authentication authentication) {
+        String requesterEmail = authentication == null ? null : authentication.getName();
+        return eventService.getEventResponseById(id, requesterEmail);
     }
 
     // Edit an event
-    @PutMapping("/{id}")
+    @RequestMapping(path = "/{id}", method = {RequestMethod.PUT, RequestMethod.PATCH})
+    @Operation(summary = "Update an owned event")
     public Event editEvent(
             @PathVariable Long id,
             @RequestBody Event event,
             Authentication authentication) {
 
         return eventService.editEvent(
-                id, event, getOrganizerUsername(authentication));
+                id, event, authentication == null ? null : authentication.getName());
     }
 
     // Publish an event
     @PatchMapping("/{id}/publish")
+    @Operation(summary = "Publish an owned event")
     public Event publishEvent(
             @PathVariable Long id,
             Authentication authentication) {
 
         return eventService.publishEvent(
-                id, getOrganizerUsername(authentication));
+                id, authentication == null ? null : authentication.getName());
     }
 
     // Cancel an event
     @PatchMapping("/{id}/cancel")
+    @Operation(summary = "Cancel an owned event")
     public Event cancelEvent(
             @PathVariable Long id,
             Authentication authentication) {
 
         return eventService.cancelEvent(
-                id, getOrganizerUsername(authentication));
+                id, authentication == null ? null : authentication.getName());
     }
 
     // Get username from the logged-in user

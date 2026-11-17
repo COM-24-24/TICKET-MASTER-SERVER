@@ -2,10 +2,12 @@ package com.ticketmaster.ticketmaster.user.service;
 
 import com.ticketmaster.ticketmaster.security.CustomUserDetailsService;
 import com.ticketmaster.ticketmaster.security.JwtService;
+import com.ticketmaster.ticketmaster.customer.CustomerProfileService;
 import com.ticketmaster.ticketmaster.user.dto.AuthResponse;
 import com.ticketmaster.ticketmaster.user.dto.LoginRequest;
 import com.ticketmaster.ticketmaster.user.dto.RegisterRequest;
 import com.ticketmaster.ticketmaster.user.entity.User;
+import com.ticketmaster.ticketmaster.user.exception.DuplicateEmailException;
 import com.ticketmaster.ticketmaster.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +37,7 @@ class UserServiceTest {
     @Mock private AuthenticationManager authenticationManager;
     @Mock private CustomUserDetailsService userDetailsService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private CustomerProfileService customerProfileService;
 
     @InjectMocks
     private UserService userService;
@@ -46,7 +49,11 @@ class UserServiceTest {
         RegisterRequest request = new RegisterRequest("newuser@test.com", "password123", User.Role.CUSTOMER);
         when(userRepository.existsByEmail("newuser@test.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashedPassword");
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User saved = inv.getArgument(0);
+            saved.setId(1L);
+            return saved;
+        });
         when(userDetailsService.loadUserByUsername("newuser@test.com"))
                 .thenReturn(org.springframework.security.core.userdetails.User
                         .withUsername("newuser@test.com")
@@ -69,11 +76,11 @@ class UserServiceTest {
         RegisterRequest request = new RegisterRequest("existing@test.com", "password123", User.Role.CUSTOMER);
         when(userRepository.existsByEmail("existing@test.com")).thenReturn(true);
 
-        IllegalArgumentException ex = assertThrows(
-                IllegalArgumentException.class,
+        DuplicateEmailException ex = assertThrows(
+                DuplicateEmailException.class,
                 () -> userService.register(request)
         );
-        assertEquals("Email already registered", ex.getMessage());
+        assertEquals("An account with this email already exists.", ex.getReason());
 
         verify(userRepository, never()).save(any(User.class));
     }
@@ -86,6 +93,7 @@ class UserServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> {
             User u = inv.getArgument(0);
             assertEquals("$2a$10$hashed", u.getPassword(), "Password must be hashed");
+            u.setId(1L);
             return u;
         });
         when(userDetailsService.loadUserByUsername(anyString()))

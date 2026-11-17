@@ -8,14 +8,14 @@ Spring Boot backend for an event ticketing system. Handles event discovery, tick
 
 ## Event Discovery and Payments
 
-- `GET /api/events` and `GET /api/events/search` support `keyword`, `category`, `location`, ISO `startDate`/`endDate`, `minPrice`, `maxPrice`, and Spring pagination/sorting parameters such as `page`, `size`, and `sort=eventDate,asc`.
-- `GET /api/events/{id}` returns event details including its `ticketTypes`; each ticket type exposes `ticketsRemaining` from `totalQuantity - soldQuantity`.
+- Event `LocalDateTime` fields are serialized as ISO-8601 strings without a timezone offset, for example `2026-12-05T15:00:00`.
+- `GET /api/events?category=Music&search=stadium` returns published events in start-time order. Cancelled and draft events are excluded. Search matches title, venue, or location without regard to case.
+- `GET /api/events/{id}` returns event details, availability, capacity and remaining-ticket totals, minimum price, and `ticketTypes` with price and inventory.
 - `GET /api/events/nearby?latitude=...&longitude=...&radiusKm=...` returns events ordered by Haversine distance with `distanceKm` and supports pagination.
 - `GET /api/events/recommended?interests=Music&interests=Sports` matches categories provided by the customer-interest source (Beatrice's service).
-- `POST /api/payments` accepts `{"orderId":123,"amount":25.00,"succeed":true}`. Omit `succeed` for a successful mock payment or set it to `false` to simulate failure. The resulting `PAID`/`FAILED` record is sent to the order service by PATCHing `/api/orders/{orderId}/status` with `{"status":"PAID"}` or `{"status":"FAILED"}`.
-- `GET /api/payments/{orderId}` returns the latest payment attempt, including whether the order-status callback succeeded.
-
-Set `ORDER_SERVICE_URL` to Zymal's service base URL; it defaults to `http://localhost:8081`. Payment attempts remain persisted if that callback is unavailable, and the response records the callback error for follow-up.
+- `POST /api/payments/checkout` accepts `{"orderId":123}` for the authenticated customer's pending order. The server derives the amount and returns a PayChangu hosted checkout URL, transaction reference, amount, `MWK` currency, and `PENDING` status.
+- `POST /api/payments/verify` verifies pending attempts directly with PayChangu before marking the order paid and returning tickets.
+- PayChangu redirects to `GET /api/payments/callback` or `GET /api/payments/return`; neither redirect is treated as proof of payment. Optional `POST /api/payments/webhook` notifications are accepted only with a valid raw-body HMAC signature and are re-verified with PayChangu.
 
 ## Tech Stack
 

@@ -1,0 +1,9 @@
+app:
+  registration:
+    allow-privileged-roles: true
+  demo-payment:
+    enabled: ${APP_DEMO_PAYMENT_ENABLED:false}
+  orders:
+    max-tickets-per-order: 1
+  seed:
+    enabled: true

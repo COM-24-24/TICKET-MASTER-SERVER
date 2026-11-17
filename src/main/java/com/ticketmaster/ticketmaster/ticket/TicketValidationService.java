@@ -1,6 +1,7 @@
 
 package com.ticketmaster.ticketmaster.ticket;
 
+import com.ticketmaster.ticketmaster.common.exception.NotFoundException;
 import com.ticketmaster.ticketmaster.ticket.dto.TicketValidationResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,8 +26,7 @@ public class TicketValidationService {
 
         Ticket ticket = ticketRepository
                 .findByTicketCodeForUpdate(ticketCode.trim())
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Ticket not found."));
+                .orElseThrow(() -> new NotFoundException("Ticket not found."));
 
         if (ticket.getStatus() == TicketStatus.USED) {
             throw new IllegalStateException(

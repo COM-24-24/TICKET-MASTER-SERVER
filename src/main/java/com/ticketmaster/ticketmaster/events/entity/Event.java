@@ -22,6 +22,12 @@ public class Event {
     @Column(nullable = false, length = 200)
     private String title;
 
+    @Column(length = 100)
+    private String category;
+
+    @Column(length = 80)
+    private String genre;
+
     @Column(nullable = false, length = 200)
     private String venue;
 
@@ -46,6 +52,9 @@ public class Event {
     @Column(name = "organizer_username", nullable = false, length = 100)
     private String organizerUsername;
 
+    @Column(name = "cover_image_path", length = 500)
+    private String coverImagePath;
+
     public Event() {
     }
 
@@ -53,8 +62,18 @@ public class Event {
     @PrePersist
     @PreUpdate
     public void validateAndSynchronizeTimes() {
-        if (startTime != null) {
+        if (startTime == null) {
+            startTime = dateTime;
+        }
+        if (dateTime == null) {
             dateTime = startTime;
+        }
+        if (startTime != null) {
+            startTime = startTime.withNano(0);
+            dateTime = startTime;
+        }
+        if (endTime != null) {
+            endTime = endTime.withNano(0);
         }
 
         if (startTime == null || endTime == null) {
@@ -86,6 +105,22 @@ public class Event {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public String getGenre() {
+        return genre;
+    }
+
+    public void setGenre(String genre) {
+        this.genre = genre;
     }
 
     public String getVenue() {
@@ -143,5 +178,13 @@ public class Event {
 
     public void setOrganizerUsername(String organizerUsername) {
         this.organizerUsername = organizerUsername;
+    }
+
+    public String getCoverImagePath() {
+        return coverImagePath;
+    }
+
+    public void setCoverImagePath(String coverImagePath) {
+        this.coverImagePath = coverImagePath;
     }
 }

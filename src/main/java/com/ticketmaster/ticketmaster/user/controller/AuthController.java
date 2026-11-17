@@ -1,7 +1,5 @@
 package com.ticketmaster.ticketmaster.user.controller;
 
-import com.ticketmaster.ticketmaster.security.CustomUserDetailsService;
-import com.ticketmaster.ticketmaster.security.JwtService;
 import com.ticketmaster.ticketmaster.user.dto.AuthResponse;
 import com.ticketmaster.ticketmaster.user.dto.GoogleLoginRequest;
 import com.ticketmaster.ticketmaster.user.dto.LoginRequest;
@@ -12,7 +10,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,13 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final UserService userService;
-    private final JwtService jwtService;
-    private final CustomUserDetailsService userDetailsService;
 
-    public AuthController(UserService userService, JwtService jwtService, CustomUserDetailsService userDetailsService) {
+    public AuthController(UserService userService) {
         this.userService = userService;
-        this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
     }
 
     @PostMapping("/register")
@@ -54,17 +47,6 @@ public class AuthController {
     @PostMapping("/refresh")
     @Operation(summary = "Refresh an expired access token")
     public ResponseEntity<AuthResponse> refreshToken(@RequestBody RefreshTokenRequest request) {
-        String userEmail = jwtService.extractUsername(request.getRefreshToken());
-        if (userEmail != null) {
-            UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
-            if (jwtService.isTokenValid(request.getRefreshToken(), userDetails)) {
-                String newAccessToken = jwtService.generateToken(userDetails);
-                return ResponseEntity.ok(AuthResponse.builder()
-                        .token(newAccessToken)
-                        .refreshToken(request.getRefreshToken())
-                        .build());
-            }
-        }
-        throw new IllegalArgumentException("Invalid or expired refresh token");
+        return ResponseEntity.ok(userService.refreshToken(request.getRefreshToken()));
     }
 }

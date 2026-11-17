@@ -1,10 +1,19 @@
 package com.ticketmaster.ticketmaster.common.exception;
 
+import com.ticketmaster.ticketmaster.payment.PaymentGatewayException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -12,36 +21,88 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(
+            NotFoundException exception, HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResourceFound(HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, "Resource not found.", request);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(
+            ResponseStatusException exception, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.valueOf(exception.getStatusCode().value());
+        return build(status, exception.getReason(), request);
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleBadCredentials(HttpServletRequest request) {
+        return build(HttpStatus.UNAUTHORIZED, "Incorrect email or password.", request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, "Access denied.", request);
+    }
+
+    @ExceptionHandler(PaymentGatewayException.class)
+    public ResponseEntity<Map<String, Object>> handlePaymentGateway(HttpServletRequest request) {
+        return build(HttpStatus.BAD_GATEWAY, "Payment service unavailable.", request);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<Map<String, Object>> handleMalformedBody(HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Malformed request body.", request);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException ex) {
-        return build(HttpStatus.BAD_REQUEST, ex.getMessage());
+    public ResponseEntity<Map<String, Object>> handleBadRequest(
+            IllegalArgumentException exception, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
     }
 
     @ExceptionHandler(SecurityException.class)
-    public ResponseEntity<Map<String, Object>> handleForbidden(SecurityException ex) {
-        return build(HttpStatus.FORBIDDEN, ex.getMessage());
+    public ResponseEntity<Map<String, Object>> handleForbidden(
+            SecurityException exception, HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, exception.getMessage(), request);
     }
 
     @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<Map<String, Object>> handleConflict(IllegalStateException ex) {
-        return build(HttpStatus.CONFLICT, ex.getMessage());
+    public ResponseEntity<Map<String, Object>> handleConflict(
+            IllegalStateException exception, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, exception.getMessage(), request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
-        String msg = ex.getBindingResult().getFieldErrors().stream()
-                .map(e -> e.getField() + ": " + e.getDefaultMessage())
+    public ResponseEntity<Map<String, Object>> handleValidation(
+            MethodArgumentNotValidException exception, HttpServletRequest request) {
+        String message = exception.getBindingResult().getFieldErrors().stream()
+                .map(error -> error.getDefaultMessage())
                 .findFirst()
-                .orElse("Validation failed");
-        return build(HttpStatus.BAD_REQUEST, msg);
+                .orElse("Validation failed.");
+        return build(HttpStatus.BAD_REQUEST, message, request);
     }
 
-    private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message) {
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> handleUnexpected(
+            Exception exception, HttpServletRequest request) {
+        logger.error("Unexpected error handling {} {}", request.getMethod(), request.getRequestURI(), exception);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error.", request);
+    }
+
+    private ResponseEntity<Map<String, Object>> build(
+            HttpStatus status, String message, HttpServletRequest request) {
         return ResponseEntity.status(status).body(Map.of(
                 "timestamp", LocalDateTime.now().toString(),
                 "status", status.value(),
                 "error", status.getReasonPhrase(),
-                "message", message
-        ));
+                "message", message == null ? status.getReasonPhrase() : message,
+                "path", request.getRequestURI()));
     }
 }

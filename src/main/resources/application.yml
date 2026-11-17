@@ -5,7 +5,7 @@ spring:
   datasource:
     url: jdbc:mariadb://localhost:3306/ticketmaster
     username: root
-    password: root
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.mariadb.jdbc.Driver
 
   jpa:
@@ -16,12 +16,21 @@ spring:
       hibernate:
         format_sql: true
 
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
+
 server:
   address: 0.0.0.0
   port: 8080
 
 jwt:
-  secret: ThisIsAVeryLongSecretKeyForJWTTokenGenerationChangeInProduction1234567890
+  secret: ${JWT_SECRET}
   expiration: 86400000
 
 google:
@@ -30,9 +39,10 @@ google:
 
 paychangu:
   secret-key: ${PAYCHANGU_SECRET_KEY}
-  base-url: https://api.paychangu.com
+  base-url: ${PAYCHANGU_BASE_URL:https://api.paychangu.com}
   callback-url: ${PAYCHANGU_CALLBACK_URL:http://localhost:8080/api/payments/callback}
   return-url: ${PAYCHANGU_RETURN_URL:http://localhost:8080/api/payments/return}
+  webhook-secret: ${PAYCHANGU_WEBHOOK_SECRET:}
   
 springdoc:
   swagger-ui:
@@ -40,4 +50,19 @@ springdoc:
 
 logging:
   level:
-    org.springframework.security: DEBUG
+    org.springframework.security: INFO
+
+app:
+  payment:
+    app-redirect-uri: ${APP_PAYMENT_REDIRECT_URI:myapp://payment-result}
+  registration:
+    allow-privileged-roles: false
+  demo-payment:
+    enabled: false
+    base-url: ${APP_DEMO_PAYMENT_BASE_URL:http://localhost:8080}
+  orders:
+    max-tickets-per-order: 10
+    pending-minutes: 30
+  uploads-dir: uploads
+  seed:
+    enabled: false

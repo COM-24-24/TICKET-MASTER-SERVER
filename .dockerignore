@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+!.env.example
+target/
+uploads/
+data/
+docker/initdb/
+.idea/
+.vscode/
+*.md

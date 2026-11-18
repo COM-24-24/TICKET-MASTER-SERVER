@@ -25,10 +25,10 @@ services:
   # Backend Service
   backend:
     build: .
-    image: ticketmaster-backend:local
+    image: ghcr.io/com-24-24/ticketmaster-backend:0.2.0
     container_name: ticketmaster-backend
     ports:
-      - "127.0.0.1:8081:8080"
+      - "127.0.0.1:8082:8082"
     env_file: .env
     environment:
       SPRING_PROFILES_ACTIVE: dev
@@ -47,11 +47,15 @@ services:
       PAYCHANGU_RETURN_URL: ${PAYCHANGU_RETURN_URL}
       PAYCHANGU_WEBHOOK_SECRET: ${PAYCHANGU_WEBHOOK_SECRET:-}
       APP_UPLOADS_DIR: /app/uploads
+      TZ: Africa/Blantyre
     volumes:
       - ticketmaster_uploads:/app/uploads
     healthcheck:
       test:
-        ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health || exit 1"]
+        [
+          "CMD-SHELL",
+          "curl -f http://localhost:8082/api/health || wget -qO- http://localhost:8082/api/health || exit 1",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10

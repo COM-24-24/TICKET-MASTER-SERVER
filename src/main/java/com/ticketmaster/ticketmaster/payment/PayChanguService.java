@@ -52,7 +52,7 @@ public class PayChanguService {
             String secretKey, String baseUrl, String callbackUrl, String returnUrl,
             String webhookSecret, RestTemplate restTemplate) {
         this.secretKey = secretKey;
-        this.baseUrl = baseUrl;
+        this.baseUrl = baseUrl == null ? "" : baseUrl.replaceAll("/+$", "");
         this.callbackUrl = callbackUrl;
         this.returnUrl = returnUrl;
         this.webhookSecret = webhookSecret;
@@ -62,6 +62,7 @@ public class PayChanguService {
     public String initiateCheckout(
             BigDecimal amount, String email, String firstName, String lastName,
             Long orderId, String txRef) {
+        validateConfiguration("checkout", true);
         Map<String, Object> body = new HashMap<>();
         body.put("amount", amount.toPlainString());
         body.put("currency", "MWK");
@@ -83,24 +84,25 @@ public class PayChanguService {
             response = restTemplate.postForEntity(
                     baseUrl + "/payment", new HttpEntity<>(body, headers()), Map.class);
         } catch (RestClientException exception) {
-            throw new PaymentGatewayException(exception);
+            throw new PaymentGatewayException("checkout", exception);
         }
 
         Map<?, ?> responseBody = response.getBody();
         if (responseBody == null || !"success".equalsIgnoreCase(
                 String.valueOf(responseBody.get("status")))) {
-            throw new PaymentGatewayException();
+            throw new PaymentGatewayException("checkout", PaymentGatewayException.FailureType.INVALID_RESPONSE);
         }
         Object data = responseBody.get("data");
         if (!(data instanceof Map<?, ?> dataMap)
                 || !(dataMap.get("checkout_url") instanceof String checkoutUrl)
                 || checkoutUrl.isBlank()) {
-            throw new PaymentGatewayException();
+            throw new PaymentGatewayException("checkout", PaymentGatewayException.FailureType.INVALID_RESPONSE);
         }
         return requirePayChanguCheckoutUrl(checkoutUrl);
     }
 
     public Verification verify(String txRef) {
+        validateConfiguration("verification", false);
         String encodedTxRef = UriUtils.encodePathSegment(txRef, StandardCharsets.UTF_8);
         ResponseEntity<Map> response;
         try {
@@ -111,13 +113,13 @@ public class PayChanguService {
                     Map.class,
                     new Object[0]);
         } catch (RestClientException exception) {
-            throw new PaymentGatewayException(exception);
+            throw new PaymentGatewayException("verification", exception);
         }
 
         Map<?, ?> body = response.getBody();
         Object data = body == null ? null : body.get("data");
         if (!(data instanceof Map<?, ?> values)) {
-            throw new PaymentGatewayException();
+            throw new PaymentGatewayException("verification", PaymentGatewayException.FailureType.INVALID_RESPONSE);
         }
         try {
             String returnedTxRef = requiredText(values, "tx_ref");
@@ -126,7 +128,7 @@ public class PayChanguService {
             BigDecimal amount = new BigDecimal(requiredText(values, "amount"));
             return new Verification(returnedTxRef, status, currency, amount);
         } catch (IllegalArgumentException exception) {
-            throw new PaymentGatewayException(exception);
+            throw new PaymentGatewayException("verification", exception);
         }
     }
 
@@ -157,6 +159,34 @@ public class PayChanguService {
         return headers;
     }
 
+    private void validateConfiguration(String operation, boolean checkout) {
+        try {
+            URI apiUri = URI.create(baseUrl);
+            if (secretKey == null || secretKey.isBlank()
+                    || !"https".equalsIgnoreCase(apiUri.getScheme())
+                    || apiUri.getHost() == null
+                    || (checkout && (!isHttpsUrl(callbackUrl) || !isHttpsUrl(returnUrl)))) {
+                throw new PaymentGatewayException(
+                        operation, PaymentGatewayException.FailureType.CONFIGURATION);
+            }
+        } catch (IllegalArgumentException exception) {
+            throw new PaymentGatewayException(
+                    operation, PaymentGatewayException.FailureType.CONFIGURATION, exception);
+        }
+    }
+
+    private boolean isHttpsUrl(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(value);
+            return "https".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
     private String requiredText(Map<?, ?> values, String name) {
         Object value = values.get(name);
         if (value == null || value.toString().isBlank()) {
@@ -175,11 +205,12 @@ public class PayChanguService {
             if (!"https".equalsIgnoreCase(uri.getScheme()) || !isPayChanguHost
                     || uri.getUserInfo() != null || (uri.getPort() != -1 && uri.getPort() != 443)) {
                 throw new PaymentGatewayException(
+                        "checkout", PaymentGatewayException.FailureType.INVALID_RESPONSE,
                         new IllegalArgumentException("PayChangu returned a non-secure checkout URL."));
             }
             return uri.toASCIIString();
         } catch (IllegalArgumentException exception) {
-            throw new PaymentGatewayException(exception);
+            throw new PaymentGatewayException("checkout", exception);
         }
     }
 

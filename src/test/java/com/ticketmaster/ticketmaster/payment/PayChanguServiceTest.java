@@ -6,11 +6,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.client.ExpectedCount;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
@@ -61,8 +63,10 @@ class PayChanguServiceTest {
                         """, MediaType.APPLICATION_JSON));
         PayChanguService service = service(restTemplate, "webhook-secret");
 
-        assertThrows(PaymentGatewayException.class, () -> service.initiateCheckout(
-                new BigDecimal("1000.00"), "buyer@example.test", "Test", "Buyer", 12L, "order-ref"));
+        PaymentGatewayException exception = assertThrows(PaymentGatewayException.class,
+                () -> service.initiateCheckout(
+                        new BigDecimal("1000.00"), "buyer@example.test", "Test", "Buyer", 12L, "order-ref"));
+        assertEquals(PaymentGatewayException.FailureType.INVALID_RESPONSE, exception.getFailureType());
         server.verify();
     }
 
@@ -76,9 +80,44 @@ class PayChanguServiceTest {
                         .body("{\"message\":\"Invalid API key\"}"));
         PayChanguService service = service(restTemplate, "webhook-secret");
 
-        assertThrows(PaymentGatewayException.class, () -> service.initiateCheckout(
-                new BigDecimal("1000.00"), "buyer@example.test", "Test", "Buyer", 12L, "order-ref"));
+        PaymentGatewayException exception = assertThrows(PaymentGatewayException.class,
+                () -> service.initiateCheckout(
+                        new BigDecimal("1000.00"), "buyer@example.test", "Test", "Buyer", 12L, "order-ref"));
+        assertEquals(PaymentGatewayException.FailureType.PROVIDER_RESPONSE, exception.getFailureType());
+        assertEquals(401, exception.getProviderStatusCode());
         server.verify();
+    }
+
+    @Test
+    void initiateCheckoutClassifiesProviderTimeout() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        server.expect(requestTo("https://api.paychangu.com/payment"))
+                .andRespond(request -> {
+                    throw new ResourceAccessException("I/O error", new SocketTimeoutException());
+                });
+        PayChanguService service = service(restTemplate, "webhook-secret");
+
+        PaymentGatewayException exception = assertThrows(PaymentGatewayException.class,
+                () -> service.initiateCheckout(
+                        new BigDecimal("1000.00"), "buyer@example.test", "Test", "Buyer", 12L, "order-ref"));
+
+        assertEquals(PaymentGatewayException.FailureType.TIMEOUT, exception.getFailureType());
+        assertEquals("checkout", exception.getOperation());
+        server.verify();
+    }
+
+    @Test
+    void initiateCheckoutFailsFastWhenSecretIsMissing() {
+        PayChanguService service = new PayChanguService(
+                "", "https://api.paychangu.com", "https://app.example/callback",
+                "https://app.example/return", "webhook-secret", new RestTemplate());
+
+        PaymentGatewayException exception = assertThrows(PaymentGatewayException.class,
+                () -> service.initiateCheckout(
+                        new BigDecimal("1000.00"), "buyer@example.test", "Test", "Buyer", 12L, "order-ref"));
+
+        assertEquals(PaymentGatewayException.FailureType.CONFIGURATION, exception.getFailureType());
     }
 
     @Test

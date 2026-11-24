@@ -12,7 +12,7 @@
 3. Check that the backend is healthy:
 
    ```sh
-   curl -fsS http://127.0.0.1:8081/api/health
+   curl -fsS http://127.0.0.1:8082/api/health
    ```
 
    Expected response:
@@ -21,9 +21,10 @@
    {"status":"ok"}
    ```
 
-The API listens on `0.0.0.0:8080` inside the container and is published on the host as
-`127.0.0.1:8081`. Host port `8080` is reserved by another local service (Apache), so
-do not use it for this API. The API routes remain `/api/events` and `/api/auth/login`.
+The API listens on `0.0.0.0:8082` both inside and outside the container. Docker Compose
+publishes it on `127.0.0.1:8082`.
+When running the app directly from the repository, Spring Boot also loads the optional
+root `.env` file; restart the app after changing its variables.
 
 After changing the Compose port mapping, recreate the backend container:
 
@@ -35,11 +36,11 @@ For a physical Android phone connected by USB, install ADB, enable USB debugging
 run this on the computer:
 
 ```sh
-adb reverse tcp:8081 tcp:8081
+adb reverse tcp:8082 tcp:8082
 ```
 
-Configure the Flutter app's API base URL as `http://localhost:8081`. The app's
-requests then reach the host's IPv4 loopback port 8081 through ADB reverse.
+Configure the Flutter app's API base URL as `http://localhost:8082`. The app's
+requests then reach the host's IPv4 loopback port 8082 through ADB reverse.
 
 The first dev-profile startup seeds the development accounts and sample events. Uploaded covers are stored in the named `ticketmaster_uploads` volume.
 

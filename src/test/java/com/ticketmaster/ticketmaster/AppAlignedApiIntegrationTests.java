@@ -594,6 +594,7 @@ class AppAlignedApiIntegrationTests {
                 .andExpect(jsonPath("$.currency").value("MWK"))
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.checkoutUrl").value("https://checkout.example.test/session"))
+                .andExpect(jsonPath("$.txRef").isNotEmpty())
                 .andReturn();
 
         JsonNode checkout = objectMapper.readTree(checkoutResult.getResponse().getContentAsString());
@@ -714,9 +715,26 @@ class AppAlignedApiIntegrationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("orderId", orderId))))
                 .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.message").value("Payment service unavailable."));
+                .andExpect(jsonPath("$.message").value(
+                        "Payment provider returned an invalid response."));
         assertEquals(PaymentStatus.PENDING,
                 paymentRepository.findByOrderIdOrderByCreatedAtDesc(orderId).get(0).getStatus());
+
+        JsonNode timeoutOrder = createOrder(bearer(customer), event.getId(), type.getId(), 1);
+        Long timeoutOrderId = timeoutOrder.path("id").asLong();
+        when(payChanguService.initiateCheckout(
+                any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
+                .thenThrow(new PaymentGatewayException("checkout",
+                        new org.springframework.web.client.ResourceAccessException(
+                                "I/O error", new java.net.SocketTimeoutException())));
+        mockMvc.perform(post("/api/payments/checkout")
+                        .header("Authorization", bearer(customer))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("orderId", timeoutOrderId))))
+                .andExpect(status().isGatewayTimeout())
+                .andExpect(jsonPath("$.message").value("Payment provider timed out."));
+        assertEquals(PaymentStatus.PENDING,
+                paymentRepository.findByOrderIdOrderByCreatedAtDesc(timeoutOrderId).get(0).getStatus());
     }
 
     @Test
@@ -731,7 +749,7 @@ class AppAlignedApiIntegrationTests {
         Long orderId = order.path("id").asLong();
         when(payChanguService.initiateCheckout(
                 any(BigDecimal.class), anyString(), anyString(), anyString(), anyLong(), anyString()))
-                .thenThrow(new PaymentGatewayException(
+                .thenThrow(new PaymentGatewayException("checkout",
                         new org.springframework.web.client.HttpClientErrorException(
                                 org.springframework.http.HttpStatus.UNAUTHORIZED)));
 
@@ -739,7 +757,9 @@ class AppAlignedApiIntegrationTests {
                         .header("Authorization", authorization)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(Map.of("orderId", orderId))))
-                .andExpect(status().isBadGateway());
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.message").value("Payment provider request failed."));
+
         assertEquals(PaymentStatus.FAILED,
                 paymentRepository.findByOrderIdOrderByCreatedAtDesc(orderId).get(0).getStatus());
 

@@ -1,6 +1,6 @@
 # Backend API endpoints
 
-Base URL with Docker Compose: `http://localhost:8081` (container port `8080` is published on host port `8081`). OpenAPI JSON is available at `/v3/api-docs`; Swagger UI is at `/swagger-ui.html`.
+Base URL with Docker Compose: `http://localhost:8082` (container port `8082` is published on host port `8082`). OpenAPI JSON is available at `/v3/api-docs`; Swagger UI is at `/swagger-ui.html`.
 
 Send authenticated requests with `Authorization: Bearer <token>`. JSON request and response dates use ISO-8601 local date-time strings, for example `2026-12-05T15:00:00` (no timezone suffix).
 
@@ -194,7 +194,7 @@ Only PUBLISHED, not-ended events are orderable. The event must match every reque
 
 With the `dev` profile, hosted PayChangu checkout is the default. Use a PayChangu test API key for student testing; PayChangu test mode simulates payments without affecting live data. The backend only returns HTTPS checkout links hosted on a PayChangu domain. If `APP_DEMO_PAYMENT_ENABLED=true`, checkout instead creates a `DEMO` attempt and returns the local simulator URL. The simulator charges no money; selecting **Simulate successful payment** calls the fake return route, marks the payment paid, and redirects to the app deep link. The app then calls `POST /api/payments/verify` with the original `orderId` to retrieve issued ticket details. The direct `/api/dev/orders/{orderId}/mark-paid` endpoint remains available for API-only demos.
 
-For a phone or emulator, configure `APP_DEMO_PAYMENT_BASE_URL` to the backend address reachable from that device. The default `http://localhost:8080` is suitable for a browser on the same computer.
+For a phone or emulator, configure `APP_DEMO_PAYMENT_BASE_URL` to the backend address reachable from that device. The default `http://localhost:8082` is suitable for a browser on the same computer.
 
 Successful response:
 
@@ -202,7 +202,7 @@ Successful response:
 {
   "orderId": 501,
   "txRef": "a9b91d06-846f-4b2b-a5aa-b64cb34c5f8c",
-  "checkoutUrl": "https://checkout.paychangu.example/session",
+  "checkoutUrl": "https://checkout.paychangu.com/session",
   "amount": 30000.00,
   "currency": "MWK",
   "status": "PENDING"
@@ -284,7 +284,7 @@ Errors use this JSON shape (validation responses use the first field error as `m
 }
 ```
 
-The gateway failure response is 502 with message `Payment service unavailable.` Unexpected server errors return 500 with message `Unexpected server error.` and no stack trace.
+Payment provider errors return a sanitized JSON error: missing server configuration returns 503, provider timeouts return 504, and connectivity, upstream HTTP, or malformed provider responses return 502. These errors are logged with the provider operation and failure category/status, never credentials or response bodies. Unexpected server errors return 500 with message `Unexpected server error.` and no stack trace.
 
 ### Redirect URI and dev accounts
 

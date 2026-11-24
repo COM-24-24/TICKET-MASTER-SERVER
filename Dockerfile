@@ -19,7 +19,7 @@ ENV TZ=Africa/Blantyre \
 WORKDIR /app
 COPY --from=build --chown=app:app /workspace/target/*.jar app.jar
 USER app
-EXPOSE 8080
+EXPOSE 8082
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
-  CMD curl -fsS http://localhost:8080/api/health || exit 1
+  CMD-SHELL curl -fsS http://localhost:8082/api/health || exit 1
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -6,7 +6,7 @@
 
 The customer-interest feature allows the authenticated customer to retrieve, add, and remove named interests. It is implemented by `CustomerInterestController`, `CustomerInterestService`, `CustomerInterestRepository`, and the `CustomerInterest` / `Interest` JPA entities.
 
-The configured backend listens on port `8082` by default (`server.port` in `application.yml`). Use the environment-specific host in the app; for example, an emulator/device may require a reachable LAN host rather than `localhost`.
+The backend listens on port `8082` by default, both in Docker and when run directly. Use the environment-specific host in the app (an emulator/device may require a reachable LAN host rather than `localhost`).
 
 Implemented capability summary:
 
@@ -53,7 +53,7 @@ The checked-in `schema.sql` defines `customer_interests` with a **composite prim
 
 ## 4. API Endpoint Reference
 
-Base URL is deployment-specific, for example `http://<host>:8082`. All paths below are relative to it.
+Base URL is deployment-specific, for example `http://<host>:8082` for local Docker Compose. All paths below are relative to it.
 
 ### 4.1 List available interest catalog
 
@@ -579,7 +579,7 @@ The following items are not implemented and should not be treated as backend com
 
 ### Flutter integration with current backend
 
-- [ ] Configure the correct environment base URL (default local backend port is `8082`).
+- [ ] Configure the correct environment base URL (local Docker Compose publishes on host port `8082`).
 - [ ] Obtain/store access token through existing auth and send `Authorization: Bearer <token>` for `/api/customers/me/interests` operations.
 - [ ] Check the authenticated account role is customer before showing customer preference management.
 - [ ] Load catalog from `GET /api/interests` and selections from `GET /api/customers/me/interests`.

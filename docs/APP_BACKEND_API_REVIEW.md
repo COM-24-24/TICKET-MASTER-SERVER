@@ -22,7 +22,7 @@ The app must treat the backend as authoritative for availability, order totals, 
 
 | Concern | Backend contract |
 |---|---|
-| Local development base URL | `http://localhost:8080`; use the correct host address for the emulator/device rather than hardcoding localhost in a deployed app. |
+| Local development base URL | `http://localhost:8082`; use the correct host address for the emulator/device rather than hardcoding localhost in a deployed app. |
 | API description | `/v3/api-docs`; Swagger UI at `/swagger-ui.html`. |
 | Authentication | Send `Authorization: Bearer <token>` on authenticated requests. JWT authentication is stateless. |
 | Successful JSON | DTO property names are camelCase. IDs are numeric; monetary amounts are decimal numbers. |
@@ -131,7 +131,7 @@ Successful response (`CheckoutResponse`):
 {
   "orderId": 501,
   "txRef": "a9b91d06-846f-4b2b-a5aa-b64cb34c5f8c",
-  "checkoutUrl": "https://checkout.paychangu.example/session",
+  "checkoutUrl": "https://checkout.paychangu.com/session",
   "amount": 30000.00,
   "currency": "MWK",
   "status": "PENDING"

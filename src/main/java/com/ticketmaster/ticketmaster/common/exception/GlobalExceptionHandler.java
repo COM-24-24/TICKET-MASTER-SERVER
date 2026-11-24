@@ -52,8 +52,43 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(PaymentGatewayException.class)
-    public ResponseEntity<Map<String, Object>> handlePaymentGateway(HttpServletRequest request) {
-        return build(HttpStatus.BAD_GATEWAY, "Payment service unavailable.", request);
+    public ResponseEntity<Map<String, Object>> handlePaymentGateway(
+            PaymentGatewayException exception, HttpServletRequest request) {
+        HttpStatus status;
+        String message;
+        switch (exception.getFailureType()) {
+            case CONFIGURATION -> {
+                status = HttpStatus.SERVICE_UNAVAILABLE;
+                message = "Payment service is not configured.";
+                logger.error("PayChangu {} is not configured.", exception.getOperation());
+            }
+            case TIMEOUT -> {
+                status = HttpStatus.GATEWAY_TIMEOUT;
+                message = "Payment provider timed out.";
+                logger.warn("PayChangu {} timed out.", exception.getOperation());
+            }
+            case PROVIDER_RESPONSE -> {
+                status = HttpStatus.BAD_GATEWAY;
+                message = "Payment provider request failed.";
+                logger.warn("PayChangu {} returned HTTP {}.",
+                        exception.getOperation(), exception.getProviderStatusCode());
+            }
+            case TRANSPORT -> {
+                status = HttpStatus.BAD_GATEWAY;
+                message = "Payment provider is unreachable.";
+                Throwable cause = exception.getCause();
+                logger.error("PayChangu {} connectivity failed ({}).",
+                        exception.getOperation(),
+                        cause == null ? "unknown" : cause.getClass().getSimpleName());
+            }
+            case INVALID_RESPONSE -> {
+                status = HttpStatus.BAD_GATEWAY;
+                message = "Payment provider returned an invalid response.";
+                logger.warn("PayChangu {} returned an invalid response.", exception.getOperation());
+            }
+            default -> throw new IllegalStateException("Unhandled payment gateway failure type.");
+        }
+        return build(status, message, request);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: optional:file:.env[.properties]
   application:
     name: ticketmaster
 
@@ -41,8 +43,8 @@ google:
 paychangu:
   secret-key: ${PAYCHANGU_SECRET_KEY:}
   base-url: ${PAYCHANGU_BASE_URL:https://api.paychangu.com}
-  callback-url: ${PAYCHANGU_CALLBACK_URL:http://localhost:8080/api/payments/callback}
-  return-url: ${PAYCHANGU_RETURN_URL:http://localhost:8080/api/payments/return}
+  callback-url: ${PAYCHANGU_CALLBACK_URL:http://localhost:8082/api/payments/callback}
+  return-url: ${PAYCHANGU_RETURN_URL:http://localhost:8082/api/payments/return}
   webhook-secret: ${PAYCHANGU_WEBHOOK_SECRET:}
 
 springdoc:
@@ -60,7 +62,7 @@ app:
     allow-privileged-roles: false
   demo-payment:
     enabled: false
-    base-url: ${APP_DEMO_PAYMENT_BASE_URL:http://localhost:8080}
+    base-url: ${APP_DEMO_PAYMENT_BASE_URL:http://localhost:8082}
   orders:
     max-tickets-per-order: 10
     pending-minutes: 30

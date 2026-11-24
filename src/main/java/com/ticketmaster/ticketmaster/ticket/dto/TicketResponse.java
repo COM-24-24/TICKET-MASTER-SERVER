@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 
 public record TicketResponse(
         Long id,
+        Long ownerId,
         Long orderId,
         String ticketCode,
         Long eventId,
@@ -22,6 +23,7 @@ public record TicketResponse(
         String ticketTypeName,
         BigDecimal ticketPrice,
         TicketStatus status,
+        String paymentStatus,
         LocalDateTime issuedAt,
         LocalDateTime usedAt,
         String qrContent,
@@ -37,6 +39,7 @@ public record TicketResponse(
 
         return new TicketResponse(
                 ticket.getId(),
+                ticket.getOwnerId(),
                 ticket.getOrderId(),
                 ticket.getTicketCode(),
 
@@ -53,6 +56,7 @@ public record TicketResponse(
                 ticket.getTicketType().getPrice(),
 
                 ticket.getStatus(),
+                "PAID",
                 ticket.getIssuedAt(),
                 ticket.getUsedAt(),
                 ticket.getTicketCode(),

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketmaster.ticketmaster.customer.CustomerProfile;
 import com.ticketmaster.ticketmaster.customer.CustomerProfileRepository;
 import com.ticketmaster.ticketmaster.entity.Payment;
+import com.ticketmaster.ticketmaster.entity.PaymentProvider;
 import com.ticketmaster.ticketmaster.entity.PaymentStatus;
 import com.ticketmaster.ticketmaster.events.entity.Event;
 import com.ticketmaster.ticketmaster.events.entity.EventRepository;
@@ -42,7 +43,9 @@ import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -234,6 +237,14 @@ class AppAlignedApiIntegrationTests {
 
         JsonNode order = createOrder(aliceAuthorization, event.getId(), ticketType.getId(), 1);
         Long orderId = order.path("id").asLong();
+        Payment payment = new Payment();
+        payment.setOrderId(orderId);
+        payment.setAmount(100.0);
+        payment.setTxRef("ticket-owner-test-" + orderId);
+        payment.setProvider(PaymentProvider.DEMO);
+        payment.setStatus(PaymentStatus.PAID);
+        payment.setCreatedAt(LocalDateTime.now());
+        paymentRepository.save(payment);
         orderService.markOrderPaid(orderId, "test");
         Long ticketId = ticketRepository.findByOwnerIdOrderByIssuedAtDesc(
                 userRepository.findByEmail("alice-purchases@example.test").orElseThrow().getId())
@@ -573,6 +584,7 @@ class AppAlignedApiIntegrationTests {
     @Test
     void checkoutUsesDatabaseAmountAndVerificationIssuesTicketsOnce() throws Exception {
         JsonNode customer = register("payment-owner@example.test", "Payment Owner");
+        JsonNode otherCustomer = register("payment-other@example.test", "Other Customer");
         User owner = userRepository.findByEmail("payment-owner@example.test").orElseThrow();
         Event event = saveEvent(owner, "Payment Event", "Music", "Hall",
                 "Lilongwe", EventStatus.PUBLISHED, 3);
@@ -646,6 +658,49 @@ class AppAlignedApiIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.tickets.length()").value(2));
         verify(payChanguService, times(1)).verify(txRef);
+
+        MvcResult secondLoginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "email", "payment-owner@example.test",
+                                "password", "password123"))))
+                .andExpect(status().isOk())
+                .andReturn();
+        String secondDeviceAuthorization = bearer(
+                objectMapper.readTree(secondLoginResult.getResponse().getContentAsString()));
+        MvcResult secondDeviceTicketsResult = mockMvc.perform(get("/api/tickets/my")
+                        .header("Authorization", secondDeviceAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andReturn();
+        JsonNode secondDeviceTickets = objectMapper.readTree(
+                secondDeviceTicketsResult.getResponse().getContentAsString());
+        Set<String> ticketIds = new HashSet<>();
+        Set<String> qrPayloads = new HashSet<>();
+        for (JsonNode ticket : secondDeviceTickets) {
+            assertEquals(owner.getId(), ticket.path("ownerId").asLong());
+            assertEquals("PAID", ticket.path("paymentStatus").asText());
+            assertEquals("VALID", ticket.path("status").asText());
+            assertEquals(event.getId(), ticket.path("eventId").asLong());
+            assertEquals("Payment Event", ticket.path("eventTitle").asText());
+            assertTrue(ticketIds.add(ticket.path("id").asText()));
+            assertTrue(qrPayloads.add(ticket.path("qrContent").asText()));
+        }
+
+        mockMvc.perform(get("/api/tickets/my")
+                        .param("ownerId", owner.getId().toString())
+                        .header("Authorization", bearer(otherCustomer)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        Long ticketToCancel = secondDeviceTickets.get(0).path("id").asLong();
+        mockMvc.perform(post("/api/tickets/{id}/cancel", ticketToCancel)
+                        .header("Authorization", secondDeviceAuthorization))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/tickets/my")
+                        .header("Authorization", secondDeviceAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
 
         mockMvc.perform(post("/api/payments/checkout")
                         .header("Authorization", authorization)

@@ -47,6 +47,8 @@ Never put PayChangu credentials or other server secrets in the app. Payment cred
 
 The event response contains `id`, `title`, `category`, `venue`, `location`, `startTime`, `endTime`, `status`, `availability`, `coverImagePath`, `minPrice`, `capacity`, `remainingTickets`, and `ticketTypes`. Each embedded ticket type contains `id`, `name`, `price`, `totalQuantity`, and `remaining`.
 
+`GET /api/tickets/my` returns a direct array of paid, issued tickets for the authenticated account. Each ticket includes `id`, numeric `ownerId`, `status`, `paymentStatus`, `qrContent`, and event details; the owner is derived from the authenticated principal, not a request parameter.
+
 The public list endpoint returns published events only. A listing is not a guarantee that an event is currently purchasable. The app must prevent or clearly disable purchase when availability is not `AVAILABLE`, the event has ended, or a requested ticket type has no remaining inventory. The server independently rechecks eligibility and stock when an order is submitted.
 
 There is no general pagination parameter documented for the event list. Do not invent one. The README describes nearby/recommended discovery, but those routes do not appear in the checked-in OpenAPI file or the inspected event controller. Treat them as unavailable until confirmed against the running server.

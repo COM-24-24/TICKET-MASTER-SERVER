@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class TicketQueryService {
@@ -41,14 +42,16 @@ public class TicketQueryService {
     public List<TicketResponse> getMyTickets(Long ownerId) {
         return ticketRepository.findByOwnerIdOrderByIssuedAtDesc(ownerId)
                 .stream()
-                .map(this::toResponse)
+                .map(ticket -> toIssuedPaidResponse(ticket, ownerId))
+                .flatMap(Optional::stream)
+                .distinct()
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public TicketResponse getMyTicketById(Long ticketId, Long ownerId) {
         return ticketRepository.findByIdAndOwnerId(ticketId, ownerId)
-                .map(this::toResponse)
+                .flatMap(ticket -> toIssuedPaidResponse(ticket, ownerId))
                 .orElseThrow(() -> new NotFoundException("Ticket not found."));
     }
 
@@ -61,28 +64,42 @@ public class TicketQueryService {
         }
         return ticketRepository.findAllByOrderId(orderId)
                 .stream()
-                .map(this::toResponse)
+                .map(ticket -> toIssuedPaidResponse(ticket, ownerId))
+                .flatMap(Optional::stream)
+                .distinct()
                 .toList();
     }
 
-    private TicketResponse toResponse(Ticket ticket) {
+    private Optional<TicketResponse> toIssuedPaidResponse(Ticket ticket, Long ownerId) {
+        if (!ownerId.equals(ticket.getOwnerId())
+                || (ticket.getStatus() != TicketStatus.VALID && ticket.getStatus() != TicketStatus.USED)) {
+            return Optional.empty();
+        }
+
+        Order order = orderRepository.findById(ticket.getOrderId()).orElse(null);
+        if (order == null || order.getStatus() != Order.OrderStatus.PAID
+                || order.getUser() == null || !ownerId.equals(order.getUser().getId())) {
+            return Optional.empty();
+        }
+
+        Payment payment = paymentRepository.findByOrderIdOrderByCreatedAtDesc(ticket.getOrderId())
+                .stream()
+                .findFirst()
+                .filter(attempt -> attempt.getStatus() == PaymentStatus.PAID)
+                .orElse(null);
+        if (payment == null) {
+            return Optional.empty();
+        }
+
         User buyer = userRepository.findById(ticket.getOwnerId())
                 .orElseThrow(() -> new IllegalStateException("Ticket buyer was not found."));
         String buyerName = customerProfileRepository.findByUserId(buyer.getId())
                 .map(profile -> profile.getFullName())
                 .filter(name -> name != null && !name.isBlank())
                 .orElseGet(() -> emailPrefix(buyer.getEmail()));
-        String paymentReference = paymentRepository
-                .findByOrderIdOrderByCreatedAtDesc(ticket.getOrderId())
-                .stream()
-                .filter(payment -> payment.getStatus() == PaymentStatus.PAID)
-                .map(Payment::getTxRef)
-                .filter(reference -> reference != null && !reference.isBlank())
-                .findFirst()
-                .orElse(null);
-
-        return new TicketResponse(
+        TicketResponse response = new TicketResponse(
                 ticket.getId(),
+                ticket.getOwnerId(),
                 ticket.getOrderId(),
                 ticket.getTicketCode(),
                 ticket.getEvent().getId(),
@@ -96,15 +113,17 @@ public class TicketQueryService {
                 ticket.getTicketType().getName(),
                 ticket.getTicketType().getPrice(),
                 ticket.getStatus(),
+                payment.getStatus().name(),
                 ticket.getIssuedAt(),
                 ticket.getUsedAt(),
                 ticket.getTicketCode(),
                 buyerName,
                 buyer.getEmail(),
-                paymentReference,
+                payment.getTxRef(),
                 "MWK",
                 ticket.getIssuedAt(),
                 ticket.getEvent().getCoverImagePath());
+        return Optional.of(response);
     }
 
     private String emailPrefix(String email) {

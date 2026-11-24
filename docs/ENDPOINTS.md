@@ -45,13 +45,35 @@ Send authenticated requests with `Authorization: Bearer <token>`. JSON request a
 | `POST /api/dev/orders/{orderId}/mark-paid` | CUSTOMER order owner; only `dev` with demo enabled | Simulate a paid order |
 | `GET /api/dev/payments/checkout/{txRef}` | Public; only `dev` with demo enabled | Open the local fake PayChangu hosted checkout |
 | `POST /api/dev/payments/return?tx_ref={txRef}` | Public; only `dev` with demo enabled | Simulate success, issue tickets and redirect to the app |
-| `GET /api/tickets/my` | Authenticated owner | List own tickets, or `[]` when none |
-| `GET /api/tickets/{id}` | Authenticated owner | Read own ticket; another user's ticket returns 404 |
+| `GET /api/tickets/my` | Authenticated owner | List own tickets for paid orders (`VALID` or `USED`), or `[]` when none |
+| `GET /api/tickets/{id}` | Authenticated owner | Read own paid, issued ticket; unavailable or another user's ticket returns 404 |
 | `POST /api/tickets/{id}/cancel` | Authenticated owner | Cancel an unused ticket |
 | `POST /api/tickets/validate` | VALIDATOR | Validate a ticket once |
 | `GET /api/reports/events/{eventId}/sales` | Public | Event sales report |
 | `GET /api/auth/qr/{text}` | Public | Render QR content as PNG |
 | `GET /uploads/**` | Public | Serve event covers with `Cache-Control: public, max-age=3600` and `X-Content-Type-Options: nosniff` |
+
+`GET /api/tickets/my` returns a direct JSON array, scoped to the authenticated user. It includes only non-cancelled tickets whose order and most recent payment are both `PAID`; request-supplied owner IDs are ignored.
+
+```json
+[
+  {
+    "id": 9001,
+    "ownerId": 18,
+    "orderId": 501,
+    "ticketCode": "7ef7a1ad-c409-48f8-8144-a5dfcfedcc09",
+    "eventId": 42,
+    "eventTitle": "AfroFusion Live 2026",
+    "venue": "Comesa Hall",
+    "location": "Blantyre",
+    "ticketTypeId": 101,
+    "ticketTypeName": "Standard",
+    "status": "VALID",
+    "paymentStatus": "PAID",
+    "qrContent": "7ef7a1ad-c409-48f8-8144-a5dfcfedcc09"
+  }
+]
+```
 
 `POST /api/orders/{id}/status` is not available. Order payment state is changed only by the verified payment flow or the development-only demo flow.
 
